@@ -1,5 +1,6 @@
 """ Politikontroller models """
 
+import re
 from datetime import datetime
 from enum import Enum
 from pydantic import BaseModel, validator
@@ -31,17 +32,32 @@ class PoliceControlTypeEnum(str, Enum):
 
 
 class Account(BaseModel):
-    uid: int
-    status: AuthStatus
-    country: str
-    phone_prefix: int
+    uid: int | None
+    status: AuthStatus | None
+    country: str = "no"
+    phone_prefix: int = 47
     phone_number: int
     password: str | None
-    state: str
+    state: str | None
 
     @property
     def username(self):
         return f"{self.phone_prefix}{self.phone_number}"
+
+    def set_username(self, value):
+        clean_value = re.sub('\D', '', str(value))
+        if len(clean_value) < 8:
+            self.phone_number = int(clean_value)
+        else:
+            self.phone_prefix = int(clean_value[:2])
+            self.phone_number = int(clean_value[2:])
+
+    def __setattr__(self, key, val):
+        method = self.__config__.property_set_methods.get(key)
+        if method is None:
+            super().__setattr__(key, val)
+        else:
+            getattr(self, method)(val)
 
     def get_query_params(self):
         """ Get query params. """
@@ -50,6 +66,9 @@ class Account(BaseModel):
             'telefon': self.phone_number,
             'passord': self.password,
         }
+
+    class Config:
+        property_set_methods = {"username": "set_username"}
 
 
 class PoliceControlType(BaseModel):
@@ -75,12 +94,6 @@ class PoliceControlPoint:
 
 
 class PoliceControl(BaseModel):
-    """
-     14242|Trøndelag|Trondheim|Observasjon  |21:04|Uniformert politibi|63.347522180959 |10.3714974432077|NOT_IN_USE|trondheim.png|YES|trondheim.png|1685387059|0|53 year|0
-     14241|Trøndelag|Malvik   |Fartskontroll|20:47|Kontroll Olderdalen|63.4258007013951|10.6856604194473|NOT_IN_USE|malvik.png   |YES|malvik.png   |1685386077|0|53 year|0
-     14239|Trøndelag|Meråker  |Toll/grense  |20:02|Toll               |63.3621679609569|11.9694197550416|NOT_IN_USE|meraaker.png |YES|meraaker.png |1685383334|0|20:04  |1685383471
-     14243|Ullensaker|Ullensaker|Observasjon|21:08|Står i krysset     |60.1525910906892|11.1852279165936|          |             |Viken/Ullensaker - 21:08|5
-    """
     id: int
     type: PoliceControlTypeEnum
     county: str

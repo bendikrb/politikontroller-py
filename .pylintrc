@@ -1,5 +1,5 @@
 [MAIN]
-py-version = 3.11
+py-version = 3.10
 persistent = false
 load-plugins=
     pylint.extensions.code_style,

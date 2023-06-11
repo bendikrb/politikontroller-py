@@ -118,7 +118,7 @@ def map_response_data(
     """Converts a cvs-like string into dictionaries."""
 
     def row_to_dict(row) -> dict[str, str]:
-        r = dict(zip(map_keys, row.split('|'))) # pylint: disable=modified-iterating-list
+        r = dict(zip(map_keys, row.split('|')))  # pylint: disable=modified-iterating-list
         return {k: r[k] for k in r.keys() if isinstance(k, str)}
 
     if multiple:

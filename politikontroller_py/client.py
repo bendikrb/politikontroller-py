@@ -5,7 +5,6 @@ from .constants import (
     NO_CONTROLS,
     NO_ACCESS_RESPONSES
 )
-#from politikontroller_app.schemas.user import User
 from .utils import (
     do_external_api_request,
     map_response_data,

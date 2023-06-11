@@ -1,15 +1,17 @@
 [tool.poetry]
 name = "politikontroller-py"
-version = "0.1.0"
+version = "1.0.0"
 description = "Unofficial client for politikontroller.no"
 authors = ["Bendik R. Brenne <bendik@konstant.no>"]
 license = "MIT"
 readme = "README.md"
-packages = [{include = "politikontroller_py"}]
+packages = [
+    { include = "politikontroller_py" },
+]
 
 [tool.poetry.dependencies]
-python = ">=3.11,<3.12"
-pydantic = "^1.10.8"
+python = ">=3.10,<3.12"
+pydantic = "^1.10.9"
 requests = "^2.31.0"
 pycryptodome = "^3.18.0"
 geojson = "^3.0.1"
