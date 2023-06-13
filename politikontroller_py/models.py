@@ -69,6 +69,7 @@ class PoliceControlType(BaseModel):
 
 
 class PoliceControlPoint:
+    type: str = "Point"
     lat: float
     lng: float
 
@@ -77,10 +78,14 @@ class PoliceControlPoint:
         self.lng = lng
 
     @property
+    def coordinates(self):
+        return (self.lat, self.lng)
+
+    @property
     def __geo_interface__(self):
         return {
-            'type': 'Point',
-            'coordinates': (self.lat, self.lng),
+            'type': self.type,
+            'coordinates': self.coordinates,
         }
 
 
@@ -127,7 +132,7 @@ class PoliceControl(BaseModel):
     def __geo_interface__(self):
         return {
             "type": "Feature",
-            "geometry": self._geometry,
+            "geometry": self._geometry.__geo_interface__,
             "properties": {
                 "title": self.title,
                 "description": self.description,
