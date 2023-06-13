@@ -38,16 +38,13 @@ class Client:
     def set_user(self, user: Account):
         self.user = user
 
-    def authenticate_user(self, phone_prefix: int, phone_number: int, password: str):
+    def authenticate_user(self, username: str, password: str):
+        auth_user = Account(**{"username": username, "password": password})
         params = {
             'p': 'l',
-            'telefon': phone_number,
-            'retning': phone_prefix,
-            'passord': password,
-            # 'token': generate_device_id(),
             'lang': 'no',
-        }
-        # 'LOGIN_OK|NO|0|47|SKIP_AUTHENTICATION|308452|0||NO_SAPHE|NO_REGNR|29|NO|NO|+47400008'
+        } | auth_user.get_query_params()
+
         result = self._api_request(params)
         _LOGGER.debug("Got result: %s", result)
         user_dict = map_response_data(result, [
@@ -62,13 +59,8 @@ class Client:
             raise AuthenticationError
 
         account_dict = {
-            **user_dict,
-            **{
-                "username": phone_number,
-                "phone_number": phone_number,
-                "password": password,
-            },
-        }
+            **user_dict
+        } | auth_user.get_query_params()
         account = Account(**{str(k): str(v) for k, v in account_dict.items()})
         self.set_user(account)
         return account

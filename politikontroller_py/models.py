@@ -6,6 +6,7 @@ from enum import Enum
 from pydantic import BaseModel, validator
 
 from .utils import parse_time_format
+from .constants import DEFAULT_COUNTRY, PHONE_PREFIXES
 
 
 class AuthStatus(str, Enum):
@@ -34,30 +35,23 @@ class PoliceControlTypeEnum(str, Enum):
 class Account(BaseModel):
     uid: int | None
     status: AuthStatus | None
-    country: str = "no"
-    phone_prefix: int = 47
-    phone_number: int
+    country: str = DEFAULT_COUNTRY
+    username: str
     password: str | None
     state: str | None
 
     @property
-    def username(self):
-        return f"{self.phone_prefix}{self.phone_number}"
+    def phone_number(self):
+        return int(self.username[2:]) if len(self.username) > 8 else int(self.username)
 
-    def set_username(self, value):
-        clean_value = re.sub('\D', '', str(value))
-        if len(clean_value) < 8:
-            self.phone_number = int(clean_value)
-        else:
-            self.phone_prefix = int(clean_value[:2])
-            self.phone_number = int(clean_value[2:])
+    @property
+    def phone_prefix(self):
+        return int(self.username[:2]) if len(self.username) > 8 else PHONE_PREFIXES.get(self.country)
 
-    def __setattr__(self, key, val):
-        method = self.__config__.property_set_methods.get(key)
-        if method is None:
-            super().__setattr__(key, val)
-        else:
-            getattr(self, method)(val)
+    @validator('username', pre=True)
+    def validate_username(cls, v):
+        v = re.sub('\D', '', str(v))
+        return v
 
     def get_query_params(self):
         """ Get query params. """
@@ -66,9 +60,6 @@ class Account(BaseModel):
             'telefon': self.phone_number,
             'passord': self.password,
         }
-
-    class Config:
-        property_set_methods = {"username": "set_username"}
 
 
 class PoliceControlType(BaseModel):
@@ -121,7 +112,7 @@ class PoliceControl(BaseModel):
     @property
     def description_truncated(self):
         return (
-            self.description[:25] + '..'
+                self.description[:25] + '..'
         ) if len(self.description) > 27 else self.description
 
     @property
@@ -148,4 +139,3 @@ class PoliceControl(BaseModel):
 class ExchangePointsResponse(BaseModel):
     status: ExchangeStatus
     message: str
-

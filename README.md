@@ -14,12 +14,9 @@ from politikontroller_py.models import Account
 
 # A valid registered user @ politikontroller.no
 user = Account(
-    phone_number=90112233,
-    phone_prefix=47,
+    username="4790112233",  # Include 2 digit prefix - or else DEFAULT_COUNTRY is assumed
     password="super-secret",
 )
-# Alternative;
-user = Account(username="4790112233", password="super-secret")
 
 client = Client(user)
 
