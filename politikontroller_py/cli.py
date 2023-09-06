@@ -18,11 +18,11 @@ client = Client()
 
 
 @click.group()
-@click.option('--username', '-u', envvar='POLITIKONTROLLER_USERNAME', type=int,
+@click.option('--username', '-u', envvar='POLITIKONTROLLER_USERNAME', type=str,
               required=True, help="Username (i.e. phone number)")
 @click.password_option(envvar='POLITIKONTROLLER_PASSWORD', type=str, required=True,
                        confirmation_prompt=False, help='Password')
-def cli(username: int, password: str):
+def cli(username: str, password: str):
     """
     Username and password can be defined using env vars:
 
@@ -30,7 +30,7 @@ def cli(username: int, password: str):
     POLITIKONTROLLER_PASSWORD
     """
     try:
-        client.authenticate_user(47, username, password)
+        client.authenticate_user(username, password)
     except AuthenticationError as err:
         raise click.BadParameter("Authentication error",
                                  param_hint=["--username", "--password"]) from err
@@ -62,3 +62,15 @@ def get_controls_in_radius(lat: float, lng: float, radius: int, speed: int):
 def get_control(control_id: int):
     control = PoliceControl(**client.get_control(control_id))
     rprint(control)
+
+
+@cli.command('get-maps', short_help='get own maps.')
+def get_maps():
+    maps = client.get_maps()
+    rprint(maps)
+
+
+@cli.command('exchange-points', short_help='exchange points (?)')
+def exchange_points():
+    res = client.exchange_points()
+    rprint(res)
