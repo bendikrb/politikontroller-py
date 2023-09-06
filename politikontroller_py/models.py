@@ -1,5 +1,4 @@
 """ Politikontroller models """
-
 import re
 from datetime import datetime
 from enum import Enum
@@ -23,6 +22,7 @@ class PoliceControlTypeEnum(str, Enum):
     BEHAVIOUR = "Belte/mobil"
     TECHNICAL = "Teknisk"
     TRAFFIC_INFO = "Trafikk info"
+    TRAFFIC_MESSAGE = "Trafikkmelding"
     OBSERVATION = "Observasjon"
     CUSTOMS = "Toll/grense"
     WEIGHT = "Vektkontroll"
@@ -46,11 +46,12 @@ class Account(BaseModel):
 
     @property
     def phone_prefix(self):
-        return int(self.username[:2]) if len(self.username) > 8 else PHONE_PREFIXES.get(self.country)
+        return int(self.username[:2]) if len(self.username) > 8 \
+            else PHONE_PREFIXES.get(self.country.lower())
 
     @validator('username', pre=True)
     def validate_username(cls, v):
-        v = re.sub('\D', '', str(v))
+        v = re.sub(r' ', '', str(v))
         return v
 
     def get_query_params(self):
@@ -79,7 +80,7 @@ class PoliceControlPoint:
 
     @property
     def coordinates(self):
-        return (self.lat, self.lng)
+        return self.lng, self.lat
 
     @property
     def __geo_interface__(self):
@@ -117,7 +118,7 @@ class PoliceControl(BaseModel):
     @property
     def description_truncated(self):
         return (
-                self.description[:25] + '..'
+            self.description[:25] + '..'
         ) if len(self.description) > 27 else self.description
 
     @property

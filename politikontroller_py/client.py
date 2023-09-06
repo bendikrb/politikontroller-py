@@ -28,7 +28,7 @@ class Client:
     def _api_request(self, params: dict, headers: dict | None = None):
         method = params.get('p')
         if method != 'l' and self.user:
-            params = params | self.user.get_query_params()
+            params.update(self.user.get_query_params())
         data = do_external_api_request(params, headers)
         if data in NO_ACCESS_RESPONSES:
             raise NoAccessException()
@@ -43,7 +43,8 @@ class Client:
         params = {
             'p': 'l',
             'lang': 'no',
-        } | auth_user.get_query_params()
+            **auth_user.get_query_params(),
+        }
 
         result = self._api_request(params)
         _LOGGER.debug("Got result: %s", result)
@@ -59,8 +60,10 @@ class Client:
             raise AuthenticationError
 
         account_dict = {
-            **user_dict
-        } | auth_user.get_query_params()
+            **auth_user.dict(),
+            **user_dict,
+        }
+
         account = Account(**{str(k): str(v) for k, v in account_dict.items()})
         self.set_user(account)
         return account

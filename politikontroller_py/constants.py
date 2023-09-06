@@ -3,7 +3,7 @@ CRYPTO_K1 = "aGFua19lcl9ob21vX3Bvbw=="  # "hank_er_homo_poo"
 CRYPTO_K2 = "ZGlsZG9zZXJ2aWNlX3N1eA=="  # "dildoservice_sux"
 CLIENT_VERSION_NUMBER = '9.1.0'
 CLIENT_OS = 'Android'
-CLIENT_TIMEOUT = 5
+CLIENT_TIMEOUT = 30
 API_URL = 'http://app.politikontroller.no'
 
 NO_ACCESS_RESPONSES = [
