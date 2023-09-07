@@ -1,4 +1,5 @@
 """ Handles requests and data untanglement towards retarded web service. """
+from __future__ import annotations
 
 from logging import getLogger
 from .constants import (
@@ -24,6 +25,12 @@ _LOGGER = getLogger(__name__)
 class Client:
     def __init__(self, user: Account | None = None):
         self.user = user
+
+    @classmethod
+    def login(cls, username: str, password: str) -> Client:
+        c = cls()
+        c.authenticate_user(username, password)
+        return c
 
     def _api_request(self, params: dict, headers: dict | None = None):
         method = params.get('p')
