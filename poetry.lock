@@ -414,17 +414,6 @@ files = [
 ]
 
 [[package]]
-name = "geojson"
-version = "3.0.1"
-description = "Python bindings and utilities for GeoJSON"
-optional = false
-python-versions = ">=3.7, <3.12"
-files = [
-    {file = "geojson-3.0.1-py3-none-any.whl", hash = "sha256:e49df982b204ed481e4c1236c57f587adf71537301cf8faf7120ab27d73c7568"},
-    {file = "geojson-3.0.1.tar.gz", hash = "sha256:ff3d75acab60b1e66504a11f7ea12c104bad32ff3c410a807788663b966dee4a"},
-]
-
-[[package]]
 name = "idna"
 version = "3.4"
 description = "Internationalized Domain Names in Applications (IDNA)"
@@ -1055,4 +1044,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<3.12"
-content-hash = "3eeb278d7cfb631790a46145aa02fdcb75f013e0483e2cf8c7a15bc0ee21a904"
+content-hash = "fe079a3300a8679cf2e4fd84f181c16b62eeb5dd9706644e4b43c3b129f9a86a"
