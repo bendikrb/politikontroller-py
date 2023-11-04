@@ -32,7 +32,7 @@ class Client:
 
     @classmethod
     def initialize(cls, username: str, password: str):
-        return cls(Account(**{username: username, password: password}))
+        return cls(Account(**{"username": username, "password": password}))
 
     @classmethod
     def login(cls, username: str, password: str) -> Client:
