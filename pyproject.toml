@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "politikontroller-py"
-version = "2.0.0"
+version = "2.0.1"
 description = "Unofficial client for politikontroller.no"
 authors = ["Bendik R. Brenne <bendik@konstant.no>"]
 license = "MIT"
@@ -10,7 +10,7 @@ packages = [
 ]
 
 [tool.poetry.dependencies]
-aiohttp = "^3.8.6"
+aiohttp = "^3.8.5"
 anyio = "^4.0.0"
 asyncclick = "^8.1.3.4"
 asyncio = "^3.4.3"
