@@ -2,7 +2,6 @@
 
 import logging
 from tabulate import tabulate
-from rich import print as rprint
 import anyio
 import asyncclick as click
 
@@ -65,19 +64,19 @@ async def get_controls_in_radius(lat: float, lng: float, radius: int, speed: int
 @click.argument('control_id', type=int, required=True)
 async def get_control(control_id: int):
     control = PoliceControl(**await client.get_control(control_id))
-    rprint(control)
+    click.echo(tabulate(control, **TABULATE_DEFAULTS))
 
 
 @cli.command('get-maps', short_help='get own maps.')
 async def get_maps():
     maps = await client.get_maps()
-    rprint(maps)
+    print(maps)
 
 
 @cli.command('exchange-points', short_help='exchange points (?)')
 async def exchange_points():
     res = await client.exchange_points()
-    rprint(res)
+    print(res)
 
 def configure_logging(debug: bool = False):
     level = logging.DEBUG if debug else logging.INFO

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "politikontroller-py"
-version = "2.0.3"
+version = "2.0.4"
 description = "Unofficial client for politikontroller.no"
 authors = ["Bendik R. Brenne <bendik@konstant.no>"]
 license = "MIT"
@@ -15,7 +15,6 @@ anyio = "4.*"
 asyncclick = "8.*"
 pycryptodome = "3.18.*"
 pydantic = "1.10.*"
-rich = "13.4.*"
 tabulate = "0.9.*"
 python = ">=3.10,<3.12"
 
