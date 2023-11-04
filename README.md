@@ -28,20 +28,24 @@ police_controls = client.get_controls(63, 11)
 ## CLI tool
 
 ```bash
-$ politikontroller 
+$ politikontroller --help
 Usage: politikontroller [OPTIONS] COMMAND [ARGS]...
 
   Username and password can be defined using env vars:
 
-  POLITIKONTROLLER_USERNAME POLITIKONTROLLER_PASSWORD
+  POLITIKONTROLLER_USERNAME
+  POLITIKONTROLLER_PASSWORD
 
 Options:
-  -u, --username INTEGER  Username (i.e. phone number)  [required]
-  --password TEXT         Password  [required]
-  --help                  Show this message and exit.
+  -u, --username TEXT  Username (i.e. phone number)  [required]
+  -p, --password TEXT  Password  [required]
+  --debug              Set logging level to DEBUG
+  --help               Show this message and exit.
 
 Commands:
+  exchange-points      exchange points (?)
   get-control          get details on a control.
   get-controls         get a list of all active controls.
   get-controls-radius  get all active controls inside a radius.
+  get-maps             get own maps.
 ```

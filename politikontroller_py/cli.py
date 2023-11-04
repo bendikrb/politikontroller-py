@@ -1,8 +1,10 @@
 """ CLI tool """
 
+import logging
 from tabulate import tabulate
 from rich import print as rprint
-import click
+import anyio
+import asyncclick as click
 
 from politikontroller_py import Client
 from politikontroller_py.models import (
@@ -19,18 +21,20 @@ client = Client()
 
 @click.group()
 @click.option('--username', '-u', envvar='POLITIKONTROLLER_USERNAME', type=str,
-              required=True, help="Username (i.e. phone number)")
-@click.password_option(envvar='POLITIKONTROLLER_PASSWORD', type=str, required=True,
+              required=True, help='Username (i.e. phone number)')
+@click.password_option('--password', '-p', envvar='POLITIKONTROLLER_PASSWORD', type=str, required=True,
                        confirmation_prompt=False, help='Password')
-def cli(username: str, password: str):
+@click.option('--debug', is_flag=True, help='Set logging level to DEBUG')
+async def cli(username: str, password: str, debug: bool):
     """
     Username and password can be defined using env vars:
 
     POLITIKONTROLLER_USERNAME
     POLITIKONTROLLER_PASSWORD
     """
+    configure_logging(debug)
     try:
-        client.authenticate_user(username, password)
+        await client.authenticate_user(username, password)
     except AuthenticationError as err:
         raise click.BadParameter("Authentication error",
                                  param_hint=["--username", "--password"]) from err
@@ -39,8 +43,8 @@ def cli(username: str, password: str):
 @cli.command('get-controls', short_help='get a list of all active controls.')
 @click.option('--lat', required=True, help='Your position (latitude)')
 @click.option('--lng', required=True, help='Your position (longitude)')
-def get_controls(lat: float, lng: float):
-    controls = client.get_controls(lat, lng)
+async def get_controls(lat: float, lng: float):
+    controls = await client.get_controls(lat, lng)
     click.echo(tabulate(controls, **TABULATE_DEFAULTS))
 
 
@@ -52,25 +56,32 @@ def get_controls(lat: float, lng: float):
               help='Radius size in kilometers')
 @click.option('--speed', type=int, required=False, metavar='km/h',
               help='Speed, unknown what this does')
-def get_controls_in_radius(lat: float, lng: float, radius: int, speed: int):
-    controls = client.get_controls_in_radius(lat, lng, radius, speed)
+async def get_controls_in_radius(lat: float, lng: float, radius: int, speed: int):
+    controls = await client.get_controls_in_radius(lat, lng, radius, speed)
     click.echo(tabulate(controls, **TABULATE_DEFAULTS))
 
 
 @cli.command('get-control', short_help='get details on a control.')
 @click.argument('control_id', type=int, required=True)
-def get_control(control_id: int):
-    control = PoliceControl(**client.get_control(control_id))
+async def get_control(control_id: int):
+    control = PoliceControl(**await client.get_control(control_id))
     rprint(control)
 
 
 @cli.command('get-maps', short_help='get own maps.')
-def get_maps():
-    maps = client.get_maps()
+async def get_maps():
+    maps = await client.get_maps()
     rprint(maps)
 
 
 @cli.command('exchange-points', short_help='exchange points (?)')
-def exchange_points():
-    res = client.exchange_points()
+async def exchange_points():
+    res = await client.exchange_points()
     rprint(res)
+
+def configure_logging(debug: bool = False):
+    level = logging.DEBUG if debug else logging.INFO
+    logging.basicConfig(level=level)
+
+if __name__ == '__main__':
+    anyio.run(cli)

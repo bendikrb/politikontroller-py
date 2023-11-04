@@ -1,4 +1,3 @@
-import binascii
 from datetime import datetime
 from logging import getLogger
 from json import JSONDecoder, JSONEncoder
@@ -7,8 +6,6 @@ import string
 import time
 import base64
 import re
-from urllib.parse import urlencode
-import requests
 from Crypto.Cipher import AES
 
 from .constants import (
@@ -16,8 +13,6 @@ from .constants import (
     CRYPTO_K2,
     CLIENT_OS,
     CLIENT_VERSION_NUMBER,
-    CLIENT_TIMEOUT,
-    API_URL,
 )
 
 _LOGGER = getLogger(__name__)
@@ -88,27 +83,6 @@ def get_query_params(params: dict):
         if k in ['bac', 'z', 'version', 'os', 'tt']:
             query[k] = re.sub(r"[|#\\\"]", "-", str(v))
     return query
-
-
-def do_external_api_request(params: dict, headers: dict | None = None):
-    if headers is None:
-        headers = {}
-
-    payload = get_query_params(params)
-    _LOGGER.debug("Doing API request with params: %s", payload)
-    url = f'{API_URL}/app.php?{aes_encrypt(urlencode(payload))}'
-    r = requests.get(url, headers={
-        'user-agent': f'PK_{CLIENT_VERSION_NUMBER}',
-        **headers,
-    }, timeout=CLIENT_TIMEOUT)
-    r.raise_for_status()
-    try:
-        data = aes_decrypt(r.text)
-    except binascii.Error:
-        data = r.text
-
-    return data.strip('\x00\x01\x02\x03\x04\x05\x06\x07\x08\x10\x0f').strip()
-
 
 def map_response_data(
     data: str,
