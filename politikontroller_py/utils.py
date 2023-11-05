@@ -113,6 +113,7 @@ def parse_time_format(text: str):
         pass
 
     try:
+        text = re.sub(r"(\d{2}:\d{2})(?: \(\d+ ganger\))?", "\\1", text)
         return int(
             datetime.strptime(text, "%H:%M").replace(
                 year=today.year,
