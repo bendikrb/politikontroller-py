@@ -1,38 +1,58 @@
-""" Handles requests and data un-entanglement to a truly retarded web service. """
+"""Handles requests and data un-entanglement to a truly retarded web service."""
 from __future__ import annotations
 
-from urllib.parse import urlencode
-from logging import getLogger
-
 import binascii
+from logging import getLogger
+from typing import TypeVar, cast
+from urllib.parse import urlencode
+
 import aiohttp
 
 from .constants import (
+    API_URL,
+    CLIENT_TIMEOUT,
+    CLIENT_VERSION_NUMBER,
+    NO_ACCESS_RESPONSES,
     NO_CONTROLS,
-    NO_ACCESS_RESPONSES, API_URL, CLIENT_TIMEOUT, CLIENT_VERSION_NUMBER,
 )
-from .utils import (
-    map_response_data, get_query_params, aes_encrypt, aes_decrypt,
+from .exceptions import (
+    AuthenticationError,
+    NoAccessError,
 )
 from .models import (
     Account,
     AuthStatus,
+    BaseResponseModel,
 )
-from .exceptions import (
-    NoAccessException,
-    AuthenticationError,
+from .utils import (
+    aes_decrypt,
+    aes_encrypt,
+    get_query_params,
+    map_response_data,
 )
+
+ResponseT = TypeVar(
+    "ResponseT",
+    bound=str | BaseResponseModel | list[BaseResponseModel] | None,
+)
+
+JUNK_CHARS = '\x00\x01\x02\x03\x04\x05\x06\x07\x08\x10\x0f'
 
 _LOGGER = getLogger(__name__)
 
 
 class Client:
-    def __init__(self, user: Account | None = None):
+    def __init__(
+        self,
+        user: Account | None = None,
+        session: aiohttp.ClientSession | None = None,
+    ):
         self.user = user
+        self._web_session = session
 
     @classmethod
-    def initialize(cls, username: str, password: str):
-        return cls(Account(**{"username": username, "password": password}))
+    def initialize(cls, username: str, password: str) -> Client:
+        return cls(Account(username=username, password=password))
 
     @classmethod
     def login(cls, username: str, password: str) -> Client:
@@ -40,14 +60,29 @@ class Client:
         c.authenticate_user(username, password)
         return c
 
-    async def api_request(self, params: dict, headers: dict | None = None):
+    @property
+    def web_session(self):
+        if self._web_session:
+            return self._web_session
+        return aiohttp.ClientSession()
+
+    async def api_request(
+        self,
+        params: dict,
+        headers: dict | None = None,
+        cast_to: type[ResponseT] | None = None,
+    ) -> ResponseT:
         method = params.get('p')
         if method != 'l' and self.user:
             params.update(self.user.get_query_params())
         data = await self.do_external_api_request(params, headers)
         if data in NO_ACCESS_RESPONSES:
-            raise NoAccessException()
+            raise NoAccessError
         _LOGGER.debug("Got response: %s", data)
+        if cast_to is not None:
+            if isinstance(data, list):
+                return [cast(cast_to, cast_to.parse_obj(d)) for d in data]
+            return cast(cast_to, cast_to.parse_obj(data))
         return data
 
     async def do_external_api_request(
@@ -66,24 +101,25 @@ class Client:
             **headers,
         }
 
-        async with aiohttp.ClientSession(
-            raise_for_status=True,
-            timeout=aiohttp.ClientTimeout(CLIENT_TIMEOUT),
-        ) as session:
-            async with session.get(url, headers=headers) as resp:
+        async with self.web_session as session:
+            async with session.get(
+                url,
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=CLIENT_TIMEOUT),
+            ) as resp:
                 enc_data = await resp.text('utf-8')
                 try:
                     data = aes_decrypt(enc_data)
                 except binascii.Error:
                     data = enc_data
 
-                return data.strip('\x00\x01\x02\x03\x04\x05\x06\x07\x08\x10\x0f').strip()
+                return data.strip(JUNK_CHARS).strip()
 
     def set_user(self, user: Account):
         self.user = user
 
     async def authenticate_user(self, username: str, password: str):
-        auth_user = Account(**{"username": username, "password": password})
+        auth_user = Account(username=username, password=password)
         params = {
             'p': 'l',
             'lang': 'no',
@@ -106,9 +142,7 @@ class Client:
         account_dict = {
             **auth_user.dict(),
             **user_dict,
-            **{
-                "username": f"{user_dict['phone_prefix']}{auth_user.username}",
-            }
+            **{"username": f"{user_dict['phone_prefix']}{auth_user.username}"}  # noqa: PIE800
         }
 
         account = Account(**{str(k): str(v) for k, v in account_dict.items()})
@@ -156,10 +190,8 @@ class Client:
     ):
         params = {
             'p': 'hk',
-            **{
-                'lat': lat,
-                'lon': lng,
-            },
+            'lat': lat,
+            'lon': lng,
             **kwargs,
         }
 
@@ -194,12 +226,34 @@ class Client:
         speed: int = 100,
         **kwargs,
     ):
-        return await self.get_controls(lat,
-                                       lng,
-                                       p='gps_kontroller',
-                                       vr=radius,
-                                       speed=speed,
-                                       **kwargs)
+
+        params = {
+            'p': 'gps_kontroller',
+            'vr': radius,
+            'speed': speed,
+            'lat': lat,
+            'lon': lng,
+            **kwargs,
+        }
+
+        result = await self.api_request(params)
+        if result == NO_CONTROLS:
+            return []
+
+        return map_response_data(result, [
+            'id',           # 30288
+            'county',       # Strand
+            'municipality', # Strand
+            'type',         # Teknisk
+            'timestamp',    # 10:12
+            'description',  # Ved Strand VGs
+            'lat',          # 59.0633822267745
+            'lng',          # 5.92275018667227
+            None,           #
+            None,           #
+            None,           # Rogaland / Strand - 10:12
+            None,           # 3
+        ], multiple=True)
 
     async def get_control_types(self):
         params = {
@@ -227,21 +281,19 @@ class Client:
             'p': 'hent_mine_kart',
         }
         result = await self.api_request(params)
-        data = map_response_data(result, [
+        return map_response_data(result, [
             'id',
             None,
             'title',
             'country',
         ], multiple=True)
-        return data
 
     async def exchange_points(self):
         params = {
             'p': 'veksle',
         }
         result = await self.api_request(params)
-        data = map_response_data(result, [
+        return map_response_data(result, [
             'status',
             'message',
         ])
-        return data

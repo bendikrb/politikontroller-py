@@ -16,4 +16,5 @@ PHONE_PREFIXES = {
     "se": 46,
     "dk": 45,
 }
+PHONE_NUMBER_LENGTH = 8
 DEFAULT_COUNTRY = "no"

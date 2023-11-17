@@ -1,6 +1,6 @@
 
 
-class NoAccessException(Exception):
+class NoAccessError(Exception):
     pass
 
 

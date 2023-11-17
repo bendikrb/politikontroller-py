@@ -1,18 +1,21 @@
-from datetime import datetime
-from logging import getLogger
-from json import JSONDecoder, JSONEncoder
+from __future__ import annotations
+
+import base64
 import random
+import re
 import string
 import time
-import base64
-import re
+from datetime import datetime, time as dt_time
+from json import JSONDecoder, JSONEncoder
+from logging import getLogger
+
 from Crypto.Cipher import AES
 
 from .constants import (
-    CRYPTO_K1,
-    CRYPTO_K2,
     CLIENT_OS,
     CLIENT_VERSION_NUMBER,
+    CRYPTO_K1,
+    CRYPTO_K2,
 )
 
 _LOGGER = getLogger(__name__)
@@ -21,7 +24,7 @@ _LOGGER = getLogger(__name__)
 def get_random_string(length: int, letters: str | None = None) -> str:
     if letters is None:
         letters = string.ascii_uppercase + string.digits
-    return ''.join(random.choice(letters) for _ in range(length))
+    return ''.join(random.choice(letters) for _ in range(length))  # noqa: S311
 
 
 def generate_device_id():
@@ -43,8 +46,7 @@ def unhash_credentials(credentials: str):
 
 
 def aes_encrypt(input_str: str):
-    """
-    Encrypts a string using AES encryption with given key and initialization vector.
+    """Encrypts a string using AES encryption with given key and initialization vector.
     Returns base64-encoded result.
     """
     key = base64.b64decode(CRYPTO_K2)
@@ -56,9 +58,7 @@ def aes_encrypt(input_str: str):
 
 
 def aes_decrypt(enc_base64: str):
-    """
-    Decrypts AES encrypted data using a given key and initialization vector.
-    """
+    """Decrypts AES encrypted data using a given key and initialization vector."""
     enc_data = base64.b64decode(enc_base64)
     key = base64.b64decode(CRYPTO_K2)
     iv = base64.b64decode(CRYPTO_K1)
@@ -67,8 +67,7 @@ def aes_decrypt(enc_base64: str):
 
 
 def get_query_params(params: dict):
-    """
-    Generates a query dictionary with random and predefined values.
+    """Generate a query dictionary with random and predefined values.
     Replaces special characters in the values with hyphens.
     """
     query = {
@@ -84,16 +83,18 @@ def get_query_params(params: dict):
             query[k] = re.sub(r"[|#\\\"]", "-", str(v))
     return query
 
+
 def map_response_data(
     data: str,
     map_keys: list[str | None],
     multiple=False
 ) -> list[dict[str, str]] | dict[str, str]:
-    """Converts a cvs-like string into dictionaries."""
+    """Convert a cvs-like string into dictionaries."""
 
     def row_to_dict(row) -> dict[str, str]:
-        r = dict(zip(map_keys, row.split('|')))  # pylint: disable=modified-iterating-list
-        return {k: r[k] for k in r.keys() if isinstance(k, str)}
+        r = dict(zip(map_keys,
+                     row.split('|')))  # pylint: disable=modified-iterating-list
+        return {k: r[k] for k in r if isinstance(k, str)}
 
     if multiple:
         return list(map(row_to_dict, list(data.split('#'))))
@@ -102,10 +103,10 @@ def map_response_data(
 
 
 def parse_time_format(text: str):
-    today = datetime.today()
+    today = datetime.now().astimezone()
     try:
         return int(
-            datetime.strptime(text, "%d.%m - %H:%M").replace(
+            datetime.strptime(text, "%d.%m - %H:%M").astimezone().replace(
                 year=today.year,
             ).timestamp()
         )
@@ -113,9 +114,19 @@ def parse_time_format(text: str):
         pass
 
     try:
+        return int(
+            datetime.combine(
+                today,
+                dt_time.fromisoformat(text),
+            ).astimezone().timestamp()
+        )
+    except ValueError:
+        pass
+
+    try:
         text = re.sub(r"(\d{2}:\d{2})(?: \(\d+ ganger\))?", "\\1", text)
         return int(
-            datetime.strptime(text, "%H:%M").replace(
+            datetime.strptime(text, "%H:%M").astimezone().replace(
                 year=today.year,
                 month=today.month,
                 day=today.day,
