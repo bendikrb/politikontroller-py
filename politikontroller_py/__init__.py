@@ -1,4 +1,4 @@
-""" politikontroller_py """
+"""politikontroller_py."""
 
 from .client import Client
 
