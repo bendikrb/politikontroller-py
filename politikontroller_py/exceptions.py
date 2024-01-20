@@ -1,8 +1,22 @@
-
-
-class NoAccessError(Exception):
+class PolitikontrollerError(Exception):
     pass
 
 
-class AuthenticationError(Exception):
+class NoAccessError(PolitikontrollerError):
+    pass
+
+
+class NoContentError(PolitikontrollerError):
+    pass
+
+
+class AuthenticationError(PolitikontrollerError):
+    pass
+
+
+class AuthenticationBlockedError(AuthenticationError):
+    pass
+
+
+class NotActivatedError(AuthenticationError):
     pass

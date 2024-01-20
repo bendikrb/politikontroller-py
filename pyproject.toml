@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "politikontroller-py"
-version = "2.2.0"
+version = "3.0.0"
 description = "Unofficial client for politikontroller.no"
 authors = ["Bendik R. Brenne <bendik@konstant.no>"]
 license = "MIT"
@@ -10,13 +10,15 @@ packages = [
 ]
 
 [tool.poetry.dependencies]
-aiohttp = "3.8.*"
+aiohttp = "^3.9.1"
 anyio = "4.*"
 asyncclick = "8.*"
-pycryptodome = "3.19.*"
-pydantic = "1.10.*"
+pycryptodome = "^3.20.0"
+pydantic = "^2.5.3"
 tabulate = "0.9.*"
 python = ">=3.10,<3.12"
+google-play-scraper = "^1.2.4"
+pylint-pydantic = "^0.3.2"
 
 [tool.poetry.group.dev.dependencies]
 pylint-pydantic = "^0.3.0"
@@ -35,7 +37,7 @@ ignore = [
     "A003",
     "ANN001", "ANN003",
     "ANN101", "ANN102",
-    "ANN201", "ANN202", "ANN204", "ANN205",
+    "ANN201", "ANN202", "ANN204", "ANN205", "ANN206",
     "ANN401",
     "COM812", "COM819",
     "D101", "D102", "D103", "D105", "D106", "D107",
@@ -43,6 +45,7 @@ ignore = [
     "D213",
     "D400", "D415",
     "E501",
+    "EM102",
     "FBT001", "FBT002", "FBT003",
     "ISC001",
     "PLR0913",

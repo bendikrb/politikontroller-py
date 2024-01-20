@@ -9,9 +9,6 @@ from tabulate import tabulate
 
 from politikontroller_py import Client
 from politikontroller_py.exceptions import AuthenticationError
-from politikontroller_py.models import (
-    PoliceControl,
-)
 
 TABULATE_DEFAULTS = {
     'tablefmt': 'rounded_grid',
@@ -64,30 +61,77 @@ async def get_controls(obj, lat: float, lng: float):
 @click.option('--speed', type=int, required=False, metavar='km/h',
               help='Speed, unknown what this does')
 @click.pass_obj
-async def get_controls_in_radius(obj, lat: float, lng: float, radius: int, speed: int):
-    controls = await obj.get_controls_in_radius(lat, lng, radius, speed)
-    click.echo(tabulate(controls, **TABULATE_DEFAULTS))
+async def get_controls_in_radius(obj: Client, lat: float, lng: float, radius: int, speed: int):
+    _controls = await obj.get_controls_in_radius(lat, lng, radius, speed)
+    controls = await obj.get_controls_from_lists(_controls)
+
+    click.echo(tabulate([d.model_dump() for d in controls], **TABULATE_DEFAULTS))
 
 
 @cli.command('get-control', short_help='get details on a control.')
 @click.argument('control_id', type=int, required=True)
 @click.pass_obj
-async def get_control(obj, control_id: int):
-    control = PoliceControl.parse_obj(await obj.get_control(control_id))
+async def get_control(obj: Client, control_id: int):
+    control = await obj.get_control(control_id)
     click.echo(tabulate(control, **TABULATE_DEFAULTS))
 
 
 @cli.command('get-maps', short_help='get own maps.')
 @click.pass_obj
-async def get_maps(obj):
+async def get_maps(obj: Client):
     maps = await obj.get_maps()
     print(maps)
 
 
 @cli.command('exchange-points', short_help='exchange points (?)')
 @click.pass_obj
-async def exchange_points(obj):
+async def exchange_points(obj: Client):
     res = await obj.exchange_points()
+    print(res)
+
+
+@cli.command('account-send-sms', short_help='send activation sms')
+@click.pass_obj
+async def account_send_sms(obj: Client):
+    res = await obj.account_send_sms()
+    print(res)
+
+
+@cli.command('account-auth-sms', short_help='activate account by sms')
+@click.pass_obj
+async def account_auth_sms(obj: Client):
+    res = await obj.account_auth_sms()
+    print(res)
+
+
+@cli.command('account-auth', short_help='activate account')
+@click.argument('code', type=str, required=True)
+@click.argument('uid', type=int, required=True)
+@click.pass_obj
+async def account_auth(obj: Client, code: str, uid: int):
+    res = await obj.account_auth(auth_code=code, uid=uid)
+    print(res)
+
+
+@cli.command('account-register', short_help='register new account')
+@click.argument('phone', type=int, required=True)
+@click.argument('password', type=str, required=True)
+@click.argument('name', type=str, required=True)
+@click.argument('country', type=str, required=True)
+@click.pass_obj
+async def account_register(
+    obj: Client,
+    phone: int,
+    password: str,
+    name: str,
+    country: str,
+):
+    res = await obj.account_register(
+        phone_number=phone,
+        password=password,
+        name=name,
+        country=country,
+    )
     print(res)
 
 
@@ -99,5 +143,7 @@ def configure_logging(debug: bool = False):
 async def main():
     await cli.main()
 
+
 if __name__ == '__main__':
+    # noinspection PyTypeChecker
     anyio.run(main)

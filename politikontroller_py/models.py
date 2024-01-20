@@ -1,31 +1,118 @@
 """Politikontroller models."""
 from __future__ import annotations
 
-from enum import Enum, StrEnum, auto
+from abc import ABC
+from datetime import datetime
+from enum import Enum, auto
+import logging
+from typing import ClassVar, Literal
 
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from .constants import DEFAULT_COUNTRY, PHONE_NUMBER_LENGTH, PHONE_PREFIXES
-from .utils import parse_time_format
+from .utils import map_response_data, parse_time_format
 
-from datetime import datetime
+_LOGGER = logging.getLogger(__name__)
+
+
+# noinspection PyUnresolvedReferences
+class StrEnum(str, Enum):
+    """A string enumeration of type `(str, Enum)`.
+    All members are compared via `upper()`. Defaults to UNKNOWN.
+    """
+
+    def __eq__(self, other: str) -> bool:
+        other = other.upper()
+        return super().__eq__(other)
+
+    @classmethod
+    def _missing_(cls, value) -> str:
+        has_unknown = False
+        for member in cls:
+            if member.name.upper() == "unknown":
+                has_unknown = True
+            if member.name.upper() == value.upper():
+                return member
+        if has_unknown:
+            _LOGGER.warning("'%s' is not a valid '%s'", value, cls.__name__)
+            return cls.UNKNOWN
+        raise ValueError(f"'{value}' is not a valid {cls.__name__}")
 
 
 class AuthStatus(StrEnum):
-    LOGIN_OK = auto()
-    LOGIN_ERROR = auto()
-
-    @classmethod
-    def _missing_(cls, value: str) -> str | None:
-        value = value.lower()
-        for member in cls:
-            if member == value:
-                return member
-        return None
+    APP_ERR = 'APP_ERR'
+    LOGIN_OK = 'LOGIN_OK'
+    LOGIN_ERROR = 'LOGIN_ERROR'
+    SPERRET = 'SPERRET'
+    NOT_ACTIVATED = 'NOT_ACTIVATED'
+    SKIP_AUTHENTICATION = 'SKIP_AUTHENTICATION'
 
 
 class ExchangeStatus(StrEnum):
     EXCHANGE_OK = auto()
+
+
+class PolitiKontrollerRequest(BaseModel):
+    pass
+
+
+class PolitiKontrollerResponse(BaseModel, ABC):
+    model_config = ConfigDict(use_enum_values=True)
+
+    attr_map: ClassVar[list[str]]
+
+    @classmethod
+    def from_response_data(
+        cls,
+        data: str,
+        multiple=False
+    ) -> list[dict[str, str]] | dict[str, str]:
+        """Convert a cvs-like string into dictionaries."""
+        return map_response_data(data, cls.attr_map, multiple)
+
+
+class AuthenticationResponse(PolitiKontrollerResponse):
+    auth_status: AuthStatus
+    premium_key: str = "NO"
+    user_level: int
+    phone_prefix: int
+    status: str | None = None
+    uid: int
+    nickname: str | None = None
+    saphne: Literal["SAPHE", "NO_SAPHE"] | None = None
+    show_regnr: Literal["REGNR", "NO_REGNR"] | None = None
+    premium_price: int | None = None
+    enable_points: Literal["YES", "NO"] | None = None
+    enable_calls: Literal["YES", "NO"] | None = None
+    needs_gps: bool | None = None
+    gps_radius: int | None = None
+    push_notification: bool | None = None
+    sms_notification: bool | None = None
+    points: int | None = None
+    exchange_code: bool | None = None
+
+    attr_map = [
+        'auth_status',
+        # 0  LoginStatus:  APP_ERR|LOGIN_OK|NOT_ACTIVATED|SPERRET|LOGIN_ERROR
+        'premium_key',  # 1  PremiumKey: str | Literal["NO"]
+        'user_level',  # 2  user_level: int
+        'phone_prefix',  # 3  RetningsKode: int
+        'status',  # 4  status: str
+        'uid',  # 5  brukerId: int
+        None,  # 6
+        'nickname',  # 7  kallenavn: str
+        'saphne',  # 8  saphne: Literal["SAPHE"] | None
+        'show_regnr',  # 9  vis_regnr: Literal["REGNR"] | None
+        'premium_price',  # 10 premium_price: int
+        'enable_points',  # 11 enable_points: str
+        'enable_calls',  # 12 enable_calls: str
+        None,  # 13 needs_gps: bool
+        'gps_radius',  # 14 gps_radius: int
+        'push_notification',  # 15 push_varsling: bool
+        'sms_notification',  # 16 sms_varsling: bool
+        'points',  # 17 DinePoeng: int
+        'exchange_code',  # 18 LosInnKode: bool
+    ]
 
 
 class PoliceControlTypeEnum(str, Enum):
@@ -47,13 +134,16 @@ class BaseResponseModel(BaseModel):
     pass
 
 
-class Account(BaseResponseModel):
-    uid: int | None
-    status: AuthStatus | None
-    country: str = DEFAULT_COUNTRY
+class AuthenticationRequest(PolitiKontrollerRequest):
     username: str
-    password: str | None
-    state: str | None
+    password: str
+
+
+# noinspection PyNestedDecorators
+class AccountBase(BaseModel):
+    username: str
+    password: str | None = None
+    country: str = DEFAULT_COUNTRY
 
     @property
     def phone_number(self):
@@ -67,8 +157,9 @@ class Account(BaseResponseModel):
             if len(self.username) > PHONE_NUMBER_LENGTH \
             else PHONE_PREFIXES.get(self.country.lower())
 
-    @validator('username', pre=True)
-    def validate_username(cls, v):  # noqa: N805
+    @field_validator('username', mode='before')
+    @classmethod
+    def validate_username(cls, v: str):
         return str(v).replace(' ', '')
 
     def get_query_params(self):
@@ -80,10 +171,30 @@ class Account(BaseResponseModel):
         }
 
 
-class PoliceControlType(BaseModel):
+class Account(AccountBase):
+    uid: int | None
+    auth_status: AuthStatus | None
+    status: str | None
+
+
+# noinspection PyNestedDecorators
+class PoliceControlType(PolitiKontrollerResponse):
     id: int
     name: PoliceControlTypeEnum
     slug: str
+
+    attr_map = [
+        'slug',
+        'name',
+        'id',
+        None,
+    ]
+
+    @field_validator('slug', mode='before')
+    @classmethod
+    def validate_slug(cls, v: str):
+        # Remove ".png"
+        return v[:-4]
 
 
 class PoliceControlPoint:
@@ -107,25 +218,49 @@ class PoliceControlPoint:
         }
 
 
-class PoliceControl(BaseResponseModel):
+# noinspection PyNestedDecorators
+class PoliceControlResponse(PolitiKontrollerResponse):
     id: int
-    type: PoliceControlTypeEnum
     county: str
-    speed_limit: int | None = None
     municipality: str
+    type: PoliceControlTypeEnum
+    timestamp: datetime | None
     description: str
     lat: float
     lng: float
-    timestamp: datetime | None
+    speed_limit: int | None = None
     last_seen: datetime | None
     confirmed: int = 0
 
-    @validator('timestamp', pre=True)
-    def timestamp_validate(cls, v):  # noqa: N805
+    attr_map = [
+        'id',  # 0  id: int  14241
+        'county',  # 1  country: str       Trøndelag
+        'municipality',  # 2  municipality: str   Malvik
+        'type',  # 3  control_type: str   Fartskontroll
+        'timestamp',  # 4     29.05 - 20:47
+        'description',  # 5     Kontroll Olderdalen
+        'lat',  # 6     63.4258007013951
+        'lng',  # 7     10.6856604194473
+        None,  # 8     |
+        None,  # 9     |
+        None,  # 10    malvik.png
+        None,  # 11    trondelag.png
+        'speed_limit',  # 12 speed_limit: int   90
+        None,  # 13 enabled   1
+        'last_seen',  # 14 last_seen: time   20:47
+        'confirmed',  # 15 confirmed: str    0  (if not 0: confirmed=red)
+        None,  # 16 confirmed   2   (0=green,  1=orange, 2=red)
+        None,  # 17 control_type: int   1
+    ]
+
+    @field_validator('timestamp', mode='before')
+    @classmethod
+    def validate_timestamp(cls, v: int):
         return cls._timestamp_validate(v)
 
-    @validator('last_seen', pre=True)
-    def last_seen_validate(cls, v):  # noqa: N805
+    @field_validator('last_seen', mode='before')
+    @classmethod
+    def validate_last_seen(cls, v: int):
         return cls._timestamp_validate(v)
 
     @property
@@ -161,9 +296,105 @@ class PoliceControl(BaseResponseModel):
         }
 
 
-class ExchangePointsResponse(BaseResponseModel):
+# noinspection PyNestedDecorators
+class PoliceGPSControlsResponse(PolitiKontrollerResponse):
+    id: int
+    county: str
+    municipality: str
+    type: PoliceControlTypeEnum
+    timestamp: datetime | None
+    description: str
+    lat: float
+    lng: float
+
+    attr_map = [
+        'id',
+        'county',
+        'municipality',
+        'type',
+        'timestamp',
+        'description',
+        'lat',
+        'lng',
+        None,
+        None,
+        None,
+        None,
+    ]
+
+    @field_validator('timestamp', mode='before')
+    @classmethod
+    def validate_timestamp(cls, v: int):
+        return cls._timestamp_validate(v)
+
+    @classmethod
+    def _timestamp_validate(cls, v: str | int) -> int | str | None:
+        if len(v) == 0 or (v.isnumeric() and int(v) == 0):
+            return None
+        return parse_time_format(v)
+
+
+# noinspection PyNestedDecorators
+class PoliceControlsResponse(PolitiKontrollerResponse):
+    id: int
+    county: str
+    municipality: str
+    type: PoliceControlTypeEnum
+    timestamp: datetime | None
+    description: str
+    lat: float
+    lng: float
+    last_seen: datetime | None
+
+    attr_map = [
+        'id',
+        'county',
+        'municipality',
+        'type',
+        None,
+        'description',
+        'lat',
+        'lng',
+        None,
+        None,
+        None,
+        None,
+        'timestamp',
+        None,
+        None,
+        'last_seen',
+    ]
+
+    @field_validator('timestamp', mode='before')
+    @classmethod
+    def validate_timestamp(cls, v: int):
+        return cls._timestamp_validate(v)
+
+    @field_validator('last_seen', mode='before')
+    @classmethod
+    def validate_last_seen(cls, v: int):
+        return cls._timestamp_validate(v)
+
+    @classmethod
+    def _timestamp_validate(cls, v: str | int) -> int | str | None:
+        if len(v) == 0 or (v.isnumeric() and int(v) == 0):
+            return None
+        return parse_time_format(v)
+
+
+class UserMap(PolitiKontrollerResponse):
+    id: int
+    title: str
+    country: str
+
+    attr_map = [
+        'id',
+        None,
+        'title',
+        'country',
+    ]
+
+
+class ExchangePointsResponse(PolitiKontrollerResponse):
     status: ExchangeStatus
     message: str
-
-
-PoliceControl.update_forward_refs()

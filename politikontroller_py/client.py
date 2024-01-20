@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import binascii
-from logging import getLogger
+import logging
 from typing import TypeVar, cast
 from urllib.parse import urlencode
 
@@ -12,17 +12,29 @@ from .constants import (
     API_URL,
     CLIENT_TIMEOUT,
     CLIENT_VERSION_NUMBER,
+    DEFAULT_COUNTRY,
     NO_ACCESS_RESPONSES,
-    NO_CONTROLS,
+    NO_CONTENT_RESPONSES,
+    PHONE_PREFIXES,
 )
 from .exceptions import (
+    AuthenticationBlockedError,
     AuthenticationError,
     NoAccessError,
+    NoContentError,
+    NotActivatedError,
 )
 from .models import (
     Account,
+    AccountBase,
+    AuthenticationResponse,
     AuthStatus,
-    BaseResponseModel,
+    PoliceControlResponse,
+    PoliceControlsResponse,
+    PoliceControlType,
+    PoliceGPSControlsResponse,
+    PolitiKontrollerResponse,
+    UserMap,
 )
 from .utils import (
     aes_decrypt,
@@ -33,12 +45,12 @@ from .utils import (
 
 ResponseT = TypeVar(
     "ResponseT",
-    bound=str | BaseResponseModel | list[BaseResponseModel] | None,
+    bound=PolitiKontrollerResponse | dict[str, any],
 )
 
 JUNK_CHARS = '\x00\x01\x02\x03\x04\x05\x06\x07\x08\x10\x0f'
 
-_LOGGER = getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
 
 class Client:
@@ -71,18 +83,27 @@ class Client:
         params: dict,
         headers: dict | None = None,
         cast_to: type[ResponseT] | None = None,
-    ) -> ResponseT:
+        is_list=False,
+    ) -> ResponseT | list[ResponseT] | str:
         method = params.get('p')
-        if method != 'l' and self.user:
+        no_auth_methods = ['l', 'r', 'check', 'endre_passord', 'endrings_kode']
+        if method not in no_auth_methods and self.user:
             params.update(self.user.get_query_params())
         data = await self.do_external_api_request(params, headers)
+        _LOGGER.debug("Got response: %s", data)
         if data in NO_ACCESS_RESPONSES:
             raise NoAccessError
-        _LOGGER.debug("Got response: %s", data)
+        if data in NO_CONTENT_RESPONSES:
+            raise NoContentError
+
+        # Attempt to cast the response data to desired model
         if cast_to is not None:
-            if isinstance(data, list):
-                return [cast(cast_to, cast_to.parse_obj(d)) for d in data]
-            return cast(cast_to, cast_to.parse_obj(data))
+            model_data = cast_to.from_response_data(data, multiple=is_list)
+            if is_list:
+                return [cast(cast_to, cast_to.model_validate(d)) for d in model_data]
+            return cast(cast_to, cast_to.model_validate(model_data))
+
+        # Return the raw response (str)
         return data
 
     async def do_external_api_request(
@@ -119,30 +140,27 @@ class Client:
         self.user = user
 
     async def authenticate_user(self, username: str, password: str):
-        auth_user = Account(username=username, password=password)
+        auth_user = AccountBase(username=username, password=password)
         params = {
             'p': 'l',
-            'lang': 'no',
+            'lang': auth_user.country.lower(),
             **auth_user.get_query_params(),
         }
 
-        result = await self.api_request(params)
+        result = await self.api_request(params, cast_to=AuthenticationResponse)
         _LOGGER.debug("Got result: %s", result)
-        user_dict = map_response_data(result, [
-            'status',
-            'country',
-            None,
-            'phone_prefix',
-            'state',
-            'uid',
-        ])
-        if user_dict.get('status') == AuthStatus.LOGIN_ERROR:
+
+        if result.auth_status == AuthStatus.LOGIN_ERROR:
             raise AuthenticationError
+        if result.auth_status == AuthStatus.SPERRET:
+            raise AuthenticationBlockedError
+        if result.auth_status == AuthStatus.NOT_ACTIVATED:
+            raise NotActivatedError
 
         account_dict = {
-            **auth_user.dict(),
-            **user_dict,
-            **{"username": f"{user_dict['phone_prefix']}{auth_user.username}"}  # noqa: PIE800
+            **auth_user.model_dump(),
+            **result.model_dump(),
+            **{"username": f"{auth_user.username}"},  # noqa: PIE800
         }
 
         account = Account(**{str(k): str(v) for k, v in account_dict.items()})
@@ -155,39 +173,19 @@ class Client:
         }
         return await self.api_request(params)
 
-    async def get_control(self, cid: int):
+    async def get_control(self, cid: int) -> PoliceControlResponse:
         params = {
             'p': 'hki',
             'kontroll_id': cid,
         }
-        result = await self.api_request(params)
-        return map_response_data(result, [
-            'id',  # 14241
-            'county',  # Trøndelag
-            'municipality',  # Malvik
-            'type',  # Fartskontroll
-            'timestamp',  # 29.05 - 20:47
-            'description',  # Kontroll Olderdalen
-            'lat',  # 63.4258007013951
-            'lng',  # 10.6856604194473
-            None,  # |
-            None,  # |
-            None,  # malvik.png
-            None,  # trondelag.png
-            'speed_limit',  # 90
-            None,  # 1
-            'last_seen',  # 20:47
-            'confirmed',  # 0
-            None,  # 2
-            None,  # 1
-        ])
+        return await self.api_request(params, cast_to=PoliceControlResponse)
 
     async def get_controls(
         self,
         lat: float,
         lng: float,
         **kwargs,
-    ):
+    ) -> list[PoliceControlsResponse]:
         params = {
             'p': 'hk',
             'lat': lat,
@@ -195,28 +193,14 @@ class Client:
             **kwargs,
         }
 
-        result = await self.api_request(params)
-        if result == NO_CONTROLS:
+        try:
+            return await self.api_request(
+                params,
+                cast_to=PoliceControlsResponse,
+                is_list=True,
+            )
+        except NoContentError:
             return []
-
-        return map_response_data(result, [
-            'id',  # 14239
-            'county',  # Trøndelag
-            'municipality',  # Meråker
-            'type',  # Toll/grense
-            None,  # 20:02
-            'description',  # Toll
-            'lat',  # 63.3621679609569
-            'lng',  # 11.9694197550416
-            None,  # NOT_IN_USE
-            None,  # meraaker.png
-            None,  # YES
-            None,  # meraaker.png
-            'timestamp',  # 1685383334
-            None,  # 0
-            None,  # 20:04
-            'last_seen',  # 1685383471
-        ], multiple=True)
 
     async def get_controls_in_radius(
         self,
@@ -225,8 +209,7 @@ class Client:
         radius: int,
         speed: int = 100,
         **kwargs,
-    ):
-
+    ) -> list[PoliceGPSControlsResponse]:
         params = {
             'p': 'gps_kontroller',
             'vr': radius,
@@ -236,61 +219,93 @@ class Client:
             **kwargs,
         }
 
-        result = await self.api_request(params)
-        if result == NO_CONTROLS:
+        try:
+            return await self.api_request(
+                params,
+                cast_to=PoliceGPSControlsResponse,
+                is_list=True,
+            )
+        except NoContentError:
             return []
 
-        return map_response_data(result, [
-            'id',           # 30288
-            'county',       # Strand
-            'municipality', # Strand
-            'type',         # Teknisk
-            'timestamp',    # 10:12
-            'description',  # Ved Strand VGs
-            'lat',          # 59.0633822267745
-            'lng',          # 5.92275018667227
-            None,           #
-            None,           #
-            None,           # Rogaland / Strand - 10:12
-            None,           # 3
-        ], multiple=True)
+    async def get_controls_from_lists(
+        self,
+        controls: list[PoliceGPSControlsResponse | PoliceControlsResponse],
+    ) -> list[PoliceControlResponse]:
+        return [await self.get_control(i.id) for i in controls]
 
-    async def get_control_types(self):
+    async def get_control_types(self) -> list[PoliceControlType]:
         params = {
             'p': 'kontrolltyper',
         }
-        result = await self.api_request(params)
+        return await self.api_request(params, cast_to=PoliceControlType, is_list=True)
 
-        data = map_response_data(result, [
-            'slug',
-            'name',
-            'id',
-            None,
-        ], multiple=True)
-        return [
-            {
-                # Remove ".png"
-                key: val[:-4] if key == 'slug' else val
-                for key, val in el.items()
-            }
-            for el in data
-        ]
-
-    async def get_maps(self):
+    async def get_maps(self) -> list[UserMap]:
         params = {
             'p': 'hent_mine_kart',
         }
-        result = await self.api_request(params)
-        return map_response_data(result, [
-            'id',
-            None,
-            'title',
-            'country',
-        ], multiple=True)
+        return await self.api_request(params, cast_to=UserMap, is_list=True)
 
     async def exchange_points(self):
         params = {
             'p': 'veksle',
+        }
+        result = await self.api_request(params)
+        return map_response_data(result, [
+            'status',
+            'message',
+        ])
+
+    async def account_register(
+        self,
+        phone_number: int,
+        password: str,
+        name: str,
+        country: str | None = None,
+    ):
+        if country is None:
+            country = DEFAULT_COUNTRY
+        country_code = PHONE_PREFIXES.get(country, 00)
+
+        params = {
+            'p': 'r',
+            'telefon': phone_number,
+            'passord': password,
+            'cc': country_code,
+            'navn': name,
+            'lang': country,
+        }
+        result = await self.api_request(params)
+        return map_response_data(result, [
+            'status',
+            'message',
+        ])
+
+    async def account_auth(self, auth_code: str, uid: int):
+        params = {
+            'p': 'auth_app',
+            'auth_kode': auth_code,
+            'uid': uid,
+        }
+        result = await self.api_request(params)
+        return map_response_data(result, [
+            'status',
+            'message',
+        ])
+
+    async def account_auth_sms(self):
+        params = {
+            'p': 'auth_sms',
+        }
+        result = await self.api_request(params)
+        return map_response_data(result, [
+            'status',
+            'message',
+        ])
+
+    async def account_send_sms(self):
+        params = {
+            'p': 'send_sms',
         }
         result = await self.api_request(params)
         return map_response_data(result, [
