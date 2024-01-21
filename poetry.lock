@@ -328,17 +328,6 @@ files = [
 ]
 
 [[package]]
-name = "google-play-scraper"
-version = "1.2.4"
-description = "Google-Play-Scraper provides APIs to easily crawl the Google Play Store for Python without any external dependencies!"
-optional = false
-python-versions = ">=3.7,<4.0"
-files = [
-    {file = "google_play_scraper-1.2.4-py3-none-any.whl", hash = "sha256:99a5af02dd5fc46143b5e56afb2a5f329f1d30b18633d28c08fd1f1988fff48b"},
-    {file = "google_play_scraper-1.2.4.tar.gz", hash = "sha256:cbda99d611a6de9a3e755785a42f13c3157bbd36089c742b45d24856afbfd5f7"},
-]
-
-[[package]]
 name = "idna"
 version = "3.6"
 description = "Internationalized Domain Names in Applications (IDNA)"
@@ -896,4 +885,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<3.12"
-content-hash = "3594bf313e6ffc45e7b2f91aa1116bef30ba03245f375ae92ab6a3f492514d71"
+content-hash = "1698dcf1018edf164b8b2c6c83b0c49c890dfd0cb8b0f0335425ca05e2e42145"
