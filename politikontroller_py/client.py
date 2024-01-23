@@ -67,9 +67,9 @@ class Client:
         return cls(Account(username=username, password=password))
 
     @classmethod
-    def login(cls, username: str, password: str) -> Client:
+    async def login(cls, username: str, password: str) -> Client:
         c = cls()
-        c.authenticate_user(username, password)
+        await c.authenticate_user(username, password)
         return c
 
     @property
