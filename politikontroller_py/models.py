@@ -271,7 +271,7 @@ class PoliceControlResponse(PolitiKontrollerResponse):
 
     @property
     def title(self):
-        return f"{self.type.value}: {self.description_truncated}"
+        return f"{self.type}: {self.description_truncated}"
 
     @classmethod
     def _timestamp_validate(cls, v: str | int) -> int | str | None:
