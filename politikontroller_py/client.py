@@ -91,9 +91,12 @@ class Client:
             params.update(self.user.get_query_params())
         data = await self.do_external_api_request(params, headers)
         _LOGGER.debug("Got response: %s", data)
+
         if data in NO_ACCESS_RESPONSES:
             raise NoAccessError
         if data in NO_CONTENT_RESPONSES:
+            raise NoContentError
+        if data.split('|')[0] in NO_CONTENT_RESPONSES:
             raise NoContentError
 
         # Attempt to cast the response data to desired model

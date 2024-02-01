@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "politikontroller-py"
-version = "3.0.8"
+version = "3.0.9"
 description = "Unofficial client for politikontroller.no"
 authors = ["Bendik R. Brenne <bendik@konstant.no>"]
 license = "MIT"
