@@ -105,11 +105,14 @@ def map_response_data(
 def parse_time_format(text: str):
     today = datetime.now().astimezone()
     try:
-        return int(
-            datetime.strptime(text, "%d.%m - %H:%M").astimezone().replace(
-                year=today.year,
-            ).timestamp()
-        )
+        # Match "%d.%m - %H:%M" this way due to failure on leap days using strptime.
+        if m := re.match(r"(\d{2})\.(\d{2}) - (\d{2}):(\d{2})", text):
+            return int(
+                datetime
+                .fromisoformat(f"{today.year}-{m[2]}-{m[1]}T{m[3]}:{m[4]}:00")
+                .astimezone()
+                .timestamp()
+            )
     except ValueError:
         pass
 

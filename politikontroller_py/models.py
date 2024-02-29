@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from abc import ABC
-from datetime import datetime
+from datetime import datetime  # noqa: TCH003
 from enum import Enum, auto
 import logging
 from typing import ClassVar, Literal
@@ -115,7 +115,7 @@ class AuthenticationResponse(PolitiKontrollerResponse):
     ]
 
 
-class PoliceControlTypeEnum(str, Enum):
+class PoliceControlTypeEnum(StrEnum):
     SPEED_TRAP = "Fartskontroll"
     BEHAVIOUR = "Belte/mobil"
     TECHNICAL = "Teknisk"
@@ -253,15 +253,12 @@ class PoliceControlResponse(PolitiKontrollerResponse):
         None,  # 17 control_type: int   1
     ]
 
-    @field_validator('timestamp', mode='before')
+    @field_validator('timestamp', 'last_seen', mode='before')
     @classmethod
-    def validate_timestamp(cls, v: int):
-        return cls._timestamp_validate(v)
-
-    @field_validator('last_seen', mode='before')
-    @classmethod
-    def validate_last_seen(cls, v: int):
-        return cls._timestamp_validate(v)
+    def parse_datetime_like(cls, v: str):
+        if len(v) == 0 or (v.isnumeric() and int(v) == 0):
+            return None
+        return parse_time_format(v)
 
     @property
     def description_truncated(self):
@@ -272,12 +269,6 @@ class PoliceControlResponse(PolitiKontrollerResponse):
     @property
     def title(self):
         return f"{self.type}: {self.description_truncated}"
-
-    @classmethod
-    def _timestamp_validate(cls, v: str | int) -> int | str | None:
-        if len(v) == 0 or (v.isnumeric() and int(v) == 0):
-            return None
-        return parse_time_format(v)
 
     @property
     def _geometry(self):
@@ -324,11 +315,7 @@ class PoliceGPSControlsResponse(PolitiKontrollerResponse):
 
     @field_validator('timestamp', mode='before')
     @classmethod
-    def validate_timestamp(cls, v: int):
-        return cls._timestamp_validate(v)
-
-    @classmethod
-    def _timestamp_validate(cls, v: str | int) -> int | str | None:
+    def parse_datetime_like(cls, v: str):
         if len(v) == 0 or (v.isnumeric() and int(v) == 0):
             return None
         return parse_time_format(v)
@@ -365,18 +352,9 @@ class PoliceControlsResponse(PolitiKontrollerResponse):
         'last_seen',
     ]
 
-    @field_validator('timestamp', mode='before')
+    @field_validator('timestamp', 'last_seen', mode='before')
     @classmethod
-    def validate_timestamp(cls, v: int):
-        return cls._timestamp_validate(v)
-
-    @field_validator('last_seen', mode='before')
-    @classmethod
-    def validate_last_seen(cls, v: int):
-        return cls._timestamp_validate(v)
-
-    @classmethod
-    def _timestamp_validate(cls, v: str | int) -> int | str | None:
+    def parse_datetime_like(cls, v: str):
         if len(v) == 0 or (v.isnumeric() and int(v) == 0):
             return None
         return parse_time_format(v)
