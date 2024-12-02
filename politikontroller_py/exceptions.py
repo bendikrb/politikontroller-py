@@ -2,7 +2,19 @@ class PolitikontrollerError(Exception):
     pass
 
 
+class PolitikontrollerConnectionError(PolitikontrollerError):
+    pass
+
+
+class PolitikontrollerTimeoutError(PolitikontrollerConnectionError):
+    pass
+
+
 class NoAccessError(PolitikontrollerError):
+    pass
+
+
+class NotFoundError(PolitikontrollerError):
     pass
 
 

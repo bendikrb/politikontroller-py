@@ -12,23 +12,22 @@ import time
 from Crypto.Cipher import AES
 
 from .constants import (
-    CLIENT_OS,
-    CLIENT_VERSION_NUMBER,
     CRYPTO_K1,
     CRYPTO_K2,
 )
 
 _LOGGER = getLogger(__name__)
+JUNK_CHARS = "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x10\x0f"
 
 
 def get_random_string(length: int, letters: str | None = None) -> str:
     if letters is None:
         letters = string.ascii_uppercase + string.digits
-    return ''.join(random.choice(letters) for _ in range(length))  # noqa: S311
+    return "".join(random.choice(letters) for _ in range(length))
 
 
 def generate_device_id():
-    return get_random_string(16, letters=string.digits + 'abcdef')
+    return get_random_string(16, letters=string.digits + "abcdef")
 
 
 def get_unix_timestamp():
@@ -36,7 +35,7 @@ def get_unix_timestamp():
 
 
 def hash_credentials(credentials: dict):
-    creds = bytes(JSONEncoder().encode(credentials), 'utf-8')
+    creds = bytes(JSONEncoder().encode(credentials), "utf-8")
     return base64.b64encode(creds).decode()
 
 
@@ -53,7 +52,7 @@ def aes_encrypt(input_str: str):
     iv = base64.b64decode(CRYPTO_K1)
     cipher = AES.new(key, AES.MODE_CBC, iv)
     length = 16 - (len(input_str) % 16)
-    input_b = bytes(input_str, 'utf-8') + bytes([length]) * length
+    input_b = bytes(input_str, "utf-8") + bytes([length]) * length
     return base64.b64encode(cipher.encrypt(input_b)).decode()
 
 
@@ -63,53 +62,37 @@ def aes_decrypt(enc_base64: str):
     key = base64.b64decode(CRYPTO_K2)
     iv = base64.b64decode(CRYPTO_K1)
     decipher = AES.new(key, AES.MODE_CBC, iv)
-    return decipher.decrypt(enc_data).decode()
-
-
-def get_query_params(params: dict):
-    """Generate a query dictionary with random and predefined values.
-    Replaces special characters in the values with hyphens.
-    """
-    query = {
-        'bac': get_random_string(10),
-        'z': int(time.time()) + 10,
-        'version': CLIENT_VERSION_NUMBER,
-        'os': CLIENT_OS,
-        **params,
-        'tt': get_random_string(5),
-    }
-    for k, v in query.items():
-        if k in ['bac', 'z', 'version', 'os', 'tt']:
-            query[k] = re.sub(r"[|#\\\"]", "-", str(v))
-    return query
+    return decipher.decrypt(enc_data).decode().strip(JUNK_CHARS).strip()
 
 
 def map_response_data(
-    data: str,
-    map_keys: list[str | None],
-    multiple=False
+    data: str, map_keys: list[str | None], multiple=False
 ) -> list[dict[str, str]] | dict[str, str]:
     """Convert a cvs-like string into dictionaries."""
 
     def row_to_dict(row) -> dict[str, str]:
-        r = dict(zip(map_keys,
-                     row.split('|')))  # pylint: disable=modified-iterating-list
+        r = dict(zip(map_keys, row.split("|")))
         return {k: r[k] for k in r if isinstance(k, str)}
 
     if multiple:
-        return list(map(row_to_dict, list(data.split('#'))))
+        return list(map(row_to_dict, list(data.split("#"))))
 
     return row_to_dict(data)
 
 
-def parse_time_format(text: str):
+def parse_datetime_like(v: str) -> int | None:
+    if len(v) == 0 or (v.isnumeric() and int(v) == 0):
+        return None
+    return int(parse_time_format(v))
+
+
+def parse_time_format(text: str) -> int | str:
     today = datetime.now().astimezone()
     try:
         # Match "%d.%m - %H:%M" this way due to failure on leap days using strptime.
         if m := re.match(r"(\d{2})\.(\d{2}) - (\d{2}):(\d{2})", text):
             return int(
-                datetime
-                .fromisoformat(f"{today.year}-{m[2]}-{m[1]}T{m[3]}:{m[4]}:00")
+                datetime.fromisoformat(f"{today.year}-{m[2]}-{m[1]}T{m[3]}:{m[4]}:00")
                 .astimezone()
                 .timestamp()
             )
@@ -121,7 +104,9 @@ def parse_time_format(text: str):
             datetime.combine(
                 today,
                 dt_time.fromisoformat(text),
-            ).astimezone().timestamp()
+            )
+            .astimezone()
+            .timestamp()
         )
     except ValueError:
         pass
@@ -129,11 +114,14 @@ def parse_time_format(text: str):
     try:
         text = re.sub(r"(\d{2}:\d{2})(?: \(\d+ ganger\))?", "\\1", text)
         return int(
-            datetime.strptime(text, "%H:%M").astimezone().replace(
+            datetime.strptime(text, "%H:%M")
+            .astimezone()
+            .replace(
                 year=today.year,
                 month=today.month,
                 day=today.day,
-            ).timestamp()
+            )
+            .timestamp()
         )
     except ValueError:
         pass
