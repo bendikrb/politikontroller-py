@@ -17,7 +17,7 @@ pycryptodome = "^3.21.0"
 mashumaro = {extras = ["orjson"], version = "^3.13.1"}
 tabulate = "0.9.*"
 python = ">=3.10,<3.13"
-async-timeout = "^5.0.1"
+async-timeout = "^4.0.3"
 
 [tool.poetry.group.dev.dependencies]
 aresponses = "^3.0.0"
