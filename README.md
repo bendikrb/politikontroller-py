@@ -2,6 +2,7 @@
 
 [![GitHub Release][releases-shield]][releases]
 [![Python Versions][py-versions-shield]][py-versions]
+[![PyPI Downloads][downloads-shield]][downloads]
 ![Project Maintenance][maintenance-shield]
 [![License][license-shield]](LICENSE)
 ![Made with Love in Norway][madewithlove-shield]
@@ -109,3 +110,5 @@ Commands:
 [codecov-shield]: https://codecov.io/gh/bendikrb/politikontroller-py/graph/badge.svg?token=IXLJ3WR4ES
 [codecov]: https://codecov.io/gh/bendikrb/politikontroller-py
 [madewithlove-shield]: https://madewithlove.now.sh/no?heart=true&colorB=%233584e4
+[downloads-shield]: https://img.shields.io/pypi/dm/politikontroller-py?style=flat
+[downloads]: https://pypistats.org/packages/politikontroller-py
