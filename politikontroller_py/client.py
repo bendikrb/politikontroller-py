@@ -7,7 +7,7 @@ import binascii
 from dataclasses import dataclass
 from http import HTTPStatus
 import logging
-from typing import TypeVar, cast
+from typing import TypeVar
 from urllib.parse import urlencode
 
 from aiohttp import ClientError, ClientResponse, ClientResponseError, ClientSession
@@ -18,6 +18,7 @@ from .constants import (
     CLIENT_TIMEOUT,
     CLIENT_VERSION_NUMBER,
     DEFAULT_COUNTRY,
+    ERROR_RESPONSES,
     NO_ACCESS_RESPONSES,
     NO_CONTENT_RESPONSES,
     PHONE_PREFIXES,
@@ -39,16 +40,21 @@ from .models import (
     AuthStatus,
     PoliceControlResponse,
     PoliceControlsResponse,
-    PoliceControlType,
     PoliceGPSControlsResponse,
     PolitiKontrollerResponse,
     UserMap,
 )
-from .models.api import APIEndpoint, EndpointRegistry, PolitiKontrollerRequest
+from .models.api import (
+    APIEndpoint,
+    EndpointRegistry,
+    PoliceControlTypeEnum,
+    PolitiKontrollerRequest,
+)
 from .utils import (
     aes_decrypt,
     aes_encrypt,
     map_response_data,
+    merge_duplicate_controls,
 )
 
 ResponseT = TypeVar(
@@ -68,12 +74,12 @@ class Client:
     _close_session: bool = False
 
     @classmethod
-    def initialize(cls, username: str, password: str) -> Client:
-        return cls(Account(username=username, password=password))
+    def initialize(cls, username: str, password: str, session: ClientSession | None = None) -> Client:
+        return cls(Account(username=username, password=password), session=session)
 
     @classmethod
-    async def login(cls, username: str, password: str) -> Client:
-        c = cls()
+    async def login(cls, username: str, password: str, session: ClientSession | None = None) -> Client:
+        c = cls(session=session)
         await c.authenticate_user(username, password)
         return c
 
@@ -109,22 +115,19 @@ class Client:
         data_parts = data.split("|")
         _LOGGER.debug("Got response: %s", data)
 
+        if data in ERROR_RESPONSES:
+            msg = "Unknown error received from Politikontroller.no"
+            raise PolitikontrollerError(msg)
         if data in NO_ACCESS_RESPONSES:
             raise NoAccessError
-        if data in NO_CONTENT_RESPONSES:
+        if data in NO_CONTENT_RESPONSES or len(data) == 0:
             raise NoContentError
         if data_parts[0] in NO_CONTENT_RESPONSES:
             raise NoContentError
-        if data_parts[0] == AuthStatus.LOGIN_ERROR:
-            msg = f"Authentication failed: {data_parts[1]}"
-            raise AuthenticationError(msg)
 
         # Attempt to cast the response data to desired model
         if cast_to is not None:
-            model_data = cast_to.from_response_data(data, multiple=is_list)
-            if is_list:
-                return [cast(cast_to, cast_to.from_dict(d)) for d in model_data]
-            return cast(cast_to, cast_to.from_dict(model_data))
+            return cast_to.from_response_data(data, multiple=is_list)
 
         # Return the raw response (str)
         return data
@@ -144,7 +147,7 @@ class Client:
         if response.status == HTTPStatus.FORBIDDEN:
             raise AuthenticationError("Authorization failed")
         if not HTTPStatus(response.status).is_success:
-            raise PolitikontrollerError(response)
+            raise ClientError(response)
 
     async def do_external_api_request(
         self,
@@ -173,10 +176,11 @@ class Client:
                     raise_for_status=self._request_check_status,
                 )
                 enc_data = await response.text("utf-8")
+                _LOGGER.debug("Response: %s", enc_data)
                 try:
                     data = aes_decrypt(enc_data)
-                except binascii.Error:
-                    data = enc_data
+                except (binascii.Error, ValueError):
+                    data = enc_data.strip()
 
                 return data
 
@@ -231,7 +235,10 @@ class Client:
 
     async def get_settings(self):
         """Get settings."""
-        return await self.api_request(APIEndpoint.SETTINGS)
+        try:
+            return await self.api_request(APIEndpoint.SETTINGS)
+        except NoContentError:
+            return {}
 
     async def get_control(self, cid: int) -> PoliceControlResponse:
         """Get details for a single control."""
@@ -247,10 +254,11 @@ class Client:
         self,
         lat: float,
         lng: float,
+        merge_duplicates: bool = True,
     ) -> list[PoliceControlsResponse]:
         """Get all active controls."""
         try:
-            return await self.api_request(
+            controls = await self.api_request(
                 APIEndpoint.SPEED_CONTROLS,
                 {
                     "lat": lat,
@@ -262,12 +270,17 @@ class Client:
         except NoContentError:
             return []
 
+        if merge_duplicates:
+            return merge_duplicate_controls(controls)
+        return controls
+
     async def get_controls_in_radius(
         self,
         lat: float,
         lng: float,
         radius: int,
         speed: int = 100,
+        merge_duplicates: bool = True,
         **kwargs,
     ) -> list[PoliceGPSControlsResponse]:
         """Get all active controls within a radius."""
@@ -279,7 +292,7 @@ class Client:
             **kwargs,
         }
         try:
-            return await self.api_request(
+            controls = await self.api_request(
                 APIEndpoint.GPS_CONTROLS,
                 params,
                 cast_to=PoliceGPSControlsResponse,
@@ -288,26 +301,30 @@ class Client:
         except NoContentError:
             return []
 
+        if merge_duplicates:
+            return merge_duplicate_controls(controls)
+        return controls
+
     async def get_controls_from_lists(
         self,
         controls: list[PoliceGPSControlsResponse | PoliceControlsResponse],
-    ) -> list[PoliceControlResponse]:
+    ) -> list[PoliceControlResponse]:  # pragma: no cover
         """Get details for a list of controls."""
         return [await self.get_control(i.id) for i in controls]
 
-    async def get_control_types(self) -> list[PoliceControlType]:
+    @staticmethod
+    def get_control_types() -> list[PoliceControlTypeEnum]:
         """Get all control types."""
-        return await self.api_request(
-            APIEndpoint.CONTROL_TYPES,
-            cast_to=PoliceControlType,
-            is_list=True,
-        )
+        return [PoliceControlTypeEnum.from_str(i) for i in list(PoliceControlTypeEnum)]
 
     async def get_maps(self) -> list[UserMap]:
         """Get all user maps."""
-        return await self.api_request(APIEndpoint.GET_MY_MAPS, cast_to=UserMap, is_list=True)
+        try:
+            return await self.api_request(APIEndpoint.GET_MY_MAPS, cast_to=UserMap, is_list=True)
+        except NoContentError:
+            return []
 
-    async def exchange_points(self):
+    async def exchange_points(self):  # pragma: no cover
         """Exchange points."""
         result = await self.api_request(APIEndpoint.EXCHANGE)
         return map_response_data(
@@ -324,7 +341,7 @@ class Client:
         password: str,
         name: str,
         country: str | None = None,
-    ):
+    ):  # pragma: no cover
         if country is None:
             country = DEFAULT_COUNTRY
         country_code = PHONE_PREFIXES.get(country)
@@ -345,7 +362,7 @@ class Client:
             ],
         )
 
-    async def account_auth(self, auth_code: str, uid: int):
+    async def account_auth(self, auth_code: str, uid: int):  # pragma: no cover
         """Activate account by auth code."""
         params = {
             "auth_kode": auth_code,
@@ -360,7 +377,7 @@ class Client:
             ],
         )
 
-    async def account_auth_sms(self):
+    async def account_auth_sms(self):  # pragma: no cover
         """Activate account by sms."""
         result = await self.api_request(APIEndpoint.AUTH_SMS)
         return map_response_data(
@@ -371,7 +388,7 @@ class Client:
             ],
         )
 
-    async def account_send_sms(self):
+    async def account_send_sms(self):  # pragma: no cover
         """Send activation sms."""
         result = await self.api_request(APIEndpoint.SEND_SMS)
         return map_response_data(

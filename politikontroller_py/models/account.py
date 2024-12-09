@@ -1,7 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+from mashumaro import field_options
+from mashumaro.config import BaseConfig
+from mashumaro.types import Discriminator
 
 from politikontroller_py.constants import (
     DEFAULT_COUNTRY,
@@ -13,9 +17,28 @@ from politikontroller_py.models.common import (
     PolitiKontrollerResponse,
     StrEnum,
 )
+from politikontroller_py.utils import map_response_data
 
 if TYPE_CHECKING:
     from politikontroller_py.models.common import T
+
+
+def deserialize_yesno(value: str):
+    return not (value == "NO" or value[:3] == "NO_")
+
+
+def serialize_yesno(value: bool, suffix: str | None = None):
+    if suffix is None:
+        return "YES" if value else "NO"
+    return suffix if value else f"NO_{suffix}"
+
+
+def deserialize_bool(value: str):
+    return value == "true"
+
+
+def serialize_bool(value: bool):
+    return "true" if value else "false"
 
 
 class AuthStatus(StrEnum):
@@ -30,45 +53,154 @@ class AuthStatus(StrEnum):
 @dataclass(kw_only=True)
 class AuthenticationResponse(PolitiKontrollerResponse):
     auth_status: AuthStatus
-    premium_key: str = "NO"
-    user_level: int
-    phone_prefix: int
-    status: str | None = None
-    uid: int
-    nickname: str | None = None
-    saphne: Literal["SAPHE", "NO_SAPHE"] | None = None
-    show_regnr: Literal["REGNR", "NO_REGNR"] | None = None
-    premium_price: int | None = None
-    enable_points: Literal["YES", "NO"] | None = None
-    enable_calls: Literal["YES", "NO"] | None = None
-    needs_gps: bool | None = None
-    gps_radius: int | None = None
-    push_notification: bool | None = None
-    sms_notification: bool | None = None
-    points: int | None = None
-    exchange_code: bool | None = None
+
+    class Config(BaseConfig):
+        discriminator = Discriminator(
+            field="auth_status",
+            include_subtypes=True,
+        )
 
     attr_map = [
         "auth_status",
-        # 0  LoginStatus:  APP_ERR|LOGIN_OK|NOT_ACTIVATED|SPERRET|LOGIN_ERROR
-        "premium_key",  # 1  PremiumKey: str | Literal["NO"]
-        "user_level",  # 2  user_level: int
-        "phone_prefix",  # 3  RetningsKode: int
-        "status",  # 4  status: str
-        "uid",  # 5  brukerId: int
-        None,  # 6
-        "nickname",  # 7  kallenavn: str
-        "saphne",  # 8  saphne: Literal["SAPHE"] | None
-        "show_regnr",  # 9  vis_regnr: Literal["REGNR"] | None
-        "premium_price",  # 10 premium_price: int
-        "enable_points",  # 11 enable_points: str
-        "enable_calls",  # 12 enable_calls: str
-        None,  # 13 needs_gps: bool
-        "gps_radius",  # 14 gps_radius: int
-        "push_notification",  # 15 push_varsling: bool
-        "sms_notification",  # 16 sms_varsling: bool
-        "points",  # 17 DinePoeng: int
-        "exchange_code",  # 18 LosInnKode: bool
+    ]
+
+    @classmethod
+    def from_response_data(cls: T, cvs: str, multiple=False) -> T | list[T]:
+        data = map_response_data(cvs, cls.attr_map, multiple)
+        auth_status = AuthStatus.from_str(data.get("auth_status"))
+        subtypes = {
+            AuthStatus.SPERRET: AuthenticationResponseBlocked,
+            AuthStatus.LOGIN_OK: AuthenticationResponseOK,
+            AuthStatus.LOGIN_ERROR: AuthenticationResponseError,
+            AuthStatus.NOT_ACTIVATED: AuthenticationResponseNotActivated,
+        }
+        sub_class = subtypes.get(auth_status, cls)
+        data = map_response_data(cvs, sub_class.attr_map, multiple)
+        return sub_class.from_dict(data)
+
+
+@dataclass
+class AuthenticationResponseOK(AuthenticationResponse):
+    auth_status: AuthStatus = AuthStatus.LOGIN_OK
+    premium_key: str = "NO"
+    user_level: int | None = None
+    phone_prefix: int | None = None
+    status: str | None = None
+    uid: int | None = None
+    nickname: str | None = None
+    saphne: bool | None = field(
+        default=None,
+        metadata=field_options(
+            deserialize=deserialize_yesno,
+            serialize=lambda v: serialize_yesno(v, suffix="SAPHE"),
+        ),
+    )
+    show_regnr: bool | None = field(
+        default=None,
+        metadata=field_options(
+            deserialize=deserialize_yesno,
+            serialize=lambda v: serialize_yesno(v, suffix="REGNR"),
+        ),
+    )
+    premium_price: int | None = None
+    enable_points: bool | None = field(
+        default=None,
+        metadata=field_options(
+            deserialize=deserialize_yesno,
+            serialize=serialize_yesno,
+        ),
+    )
+    enable_calls: bool | None = field(
+        default=None,
+        metadata=field_options(
+            deserialize=deserialize_yesno,
+            serialize=serialize_yesno,
+        ),
+    )
+    needs_gps: bool | None = field(
+        default=None,
+        metadata=field_options(
+            deserialize=deserialize_bool,
+            serialize=serialize_bool,
+        ),
+    )
+    gps_radius: int | None = None
+    push_notification: bool | None = field(
+        default=None,
+        metadata=field_options(
+            deserialize=deserialize_bool,
+            serialize=serialize_bool,
+        ),
+    )
+    sms_notification: bool | None = field(
+        default=None,
+        metadata=field_options(
+            deserialize=deserialize_bool,
+            serialize=serialize_bool,
+        ),
+    )
+    points: int | None = None
+    exchange_code: bool | None = field(
+        default=None,
+        metadata=field_options(
+            deserialize=deserialize_bool,
+            serialize=serialize_bool,
+        ),
+    )
+
+    attr_map = [
+        "auth_status",  # LOGIN_OK
+        "premium_key",  # NO
+        "user_level",  # 0
+        "phone_prefix",  # 47
+        "status",  # SKIP_AUTHENTICATION
+        "uid",  # 1000
+        None,  # 0
+        "nickname",
+        "saphne",  # NO_SAPHE
+        "show_regnr",  # NO_REGNR
+        "premium_price",  # 29
+        "enable_points",  # NO
+        "enable_calls",  # NO
+        None,  # +47400008
+        "gps_radius",  # 30
+        "push_notification",  # true
+        "sms_notification",  # false
+        "points",  # 62
+        "exchange_code",  # false
+    ]
+
+
+@dataclass(kw_only=True)
+class AuthenticationResponseBlocked(AuthenticationResponse):
+    auth_status: AuthStatus = AuthStatus.SPERRET
+    block_reason: str
+
+    attr_map = [
+        "auth_status",  # SPERRET
+        "block_reason",  # ...
+    ]
+
+
+@dataclass(kw_only=True)
+class AuthenticationResponseError(AuthenticationResponse):
+    auth_status: AuthStatus = AuthStatus.LOGIN_ERROR
+    error: str
+
+    attr_map = [
+        "auth_status",  # LOGIN_ERROR
+        "error",  # WRONG_USERNAME_OR_PASSWORD
+    ]
+
+
+@dataclass(kw_only=True)
+class AuthenticationResponseNotActivated(AuthenticationResponse):
+    auth_status: AuthStatus = AuthStatus.NOT_ACTIVATED
+    uid: int
+
+    attr_map = [
+        "auth_status",  # NOT_ACTIVATED
+        "uid",  # 1000
     ]
 
 
@@ -94,14 +226,6 @@ class AccountBase(BaseModel):
             if len(self.username) > PHONE_NUMBER_LENGTH
             else PHONE_PREFIXES.get(self.country.lower())
         )
-
-    def get_query_params(self):
-        """Get query params."""
-        return {
-            "retning": self.phone_prefix,
-            "telefon": self.phone_number,
-            "passord": self.password,
-        }
 
 
 @dataclass(kw_only=True)

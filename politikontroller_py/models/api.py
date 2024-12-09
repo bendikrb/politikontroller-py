@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime
+from math import radians
 import re
 from typing import TYPE_CHECKING, ClassVar, Literal, TypeVar
 
@@ -21,10 +22,17 @@ from politikontroller_py.models.common import (
     PolitiKontrollerResponse,
     StrEnum,
 )
-from politikontroller_py.utils import get_random_string, get_unix_timestamp, parse_datetime_like
+from politikontroller_py.utils import (
+    average_points,
+    get_random_string,
+    get_unix_timestamp,
+    parse_datetime_like,
+)
 
 if TYPE_CHECKING:
     from politikontroller_py.models.common import T
+
+PC = TypeVar("PC", bound="PoliceControl")
 
 
 # noinspection SpellCheckingInspection
@@ -47,23 +55,22 @@ class ExchangeStatus(StrEnum):
     EXCHANGE_OK = "EXCHANGE_OK"
 
 
-class PoliceControlType(PolitiKontrollerResponse):
-    id: int
-    name: PoliceControlTypeEnum
+class PoliceControlType(BaseModel):
+    type: PoliceControlTypeEnum
     slug: str
 
-    attr_map = [
-        "slug",
-        "name",
-        "id",
-        None,
-    ]
-
-    @classmethod
-    def __pre_deserialize__(cls: type[T], d: T) -> T:
-        # Remove ".png"
-        d["slug"] = d.get("slug", "")[:-4]
-        return d
+    # attr_map = [
+    #     "slug",
+    #     "name",
+    #     "id",
+    #     None,
+    # ]
+    #
+    # @classmethod
+    # def __pre_deserialize__(cls: type[T], d: T) -> T:
+    #     # Remove ".png"
+    #     d["slug"] = d.get("slug", "")[:-4]
+    #     return d
 
 
 @dataclass
@@ -72,25 +79,29 @@ class PoliceControlPoint(BaseModel):
     lng: float
     type: str = "Point"
 
-    @property
-    def coordinates(self):
-        return self.lng, self.lat
+    def coordinates(self, as_radian=False):
+        if as_radian:
+            return radians(self.lat), radians(self.lng)
+        return self.lat, self.lng
 
     @property
     def __geo_interface__(self):
         return {
             "type": self.type,
-            "coordinates": self.coordinates,
+            "coordinates": self.coordinates(),
         }
 
 
-# noinspection SpellCheckingInspection
-@dataclass(kw_only=True)
-class PoliceControlResponse(PolitiKontrollerResponse):
+@dataclass
+class PoliceControl(PolitiKontrollerResponse):
     id: int
     county: str
     municipality: str
+    description: str
     type: PoliceControlTypeEnum
+    lat: float
+    lng: float
+    point: PoliceControlPoint
     timestamp: datetime | None = field(
         default=None,
         metadata=field_options(
@@ -98,45 +109,19 @@ class PoliceControlResponse(PolitiKontrollerResponse):
             serialize=lambda v: int(datetime.timestamp(v)),
         ),
     )
-    description: str
-    lat: float
-    lng: float
-    speed_limit: int | None = None
-    last_seen: datetime | None = field(
-        default=None,
-        metadata=field_options(
-            deserialize=datetime.fromtimestamp,
-            serialize=lambda v: int(datetime.timestamp(v)),
-        ),
-    )
-    confirmed: int = 0
-
-    attr_map = [
-        "id",  # 0  id: int  14241
-        "county",  # 1  country: str       Trøndelag
-        "municipality",  # 2  municipality: str   Malvik
-        "type",  # 3  control_type: str   Fartskontroll
-        "timestamp",  # 4     29.05 - 20:47
-        "description",  # 5     Kontroll Olderdalen
-        "lat",  # 6     63.4258007013951
-        "lng",  # 7     10.6856604194473
-        None,  # 8     |
-        None,  # 9     |
-        None,  # 10    malvik.png
-        None,  # 11    trondelag.png
-        "speed_limit",  # 12 speed_limit: int   90
-        None,  # 13 enabled   1
-        "last_seen",  # 14 last_seen: time   20:47
-        "confirmed",  # 15 confirmed: str    0  (if not 0: confirmed=red)
-        None,  # 16 confirmed   2   (0=green,  1=orange, 2=red)
-        None,  # 17 control_type: int   1
-    ]
+    _merged_with: list[PoliceControl] = field(init=False, default_factory=list)
 
     @classmethod
     def __pre_deserialize__(cls: type[T], d: T) -> T:
         for k in ["timestamp", "last_seen"]:
-            d[k] = parse_datetime_like(d.get(k, ""))
+            if k in d:
+                d[k] = parse_datetime_like(d.get(k, ""))
+        d["point"] = {"lat": d["lat"], "lng": d["lng"]}
         return d
+
+    @property
+    def duplicates(self) -> list[PoliceControl]:
+        return self._merged_with
 
     @property
     def description_truncated(self):
@@ -167,24 +152,69 @@ class PoliceControlResponse(PolitiKontrollerResponse):
             },
         }
 
+    # noinspection PyAttributeOutsideInit
+    def add_merged(self: PC, other: PC):
+        self._merged_with.append(other)
+        self.timestamp = max(other.timestamp, self.timestamp)
+        if hasattr(self, "last_seen"):
+            self.last_seen = max(other.last_seen, self.last_seen)
+        if hasattr(self, "confirmed"):  # pragma: no cover
+            self.confirmed = max(other.confirmed, self.confirmed)
+        if hasattr(self, "speed_limit"):  # pragma: no cover
+            self.speed_limit = min(other.speed_limit, self.speed_limit)
 
+    def merge_with(self: PC, other: PC) -> PC:
+        lat, lng = average_points(self.point, other.point)
+        data = self.to_dict()
+        data.update(
+            {
+                "lat": lat,
+                "lng": lng,
+            }
+        )
+        control = type(self).from_dict(data)
+        control.add_merged(other)
+        control.add_merged(self)
+        return control
+
+
+# noinspection SpellCheckingInspection
 @dataclass(kw_only=True)
-class PoliceGPSControlsResponse(PolitiKontrollerResponse):
-    id: int
-    county: str
-    municipality: str
-    type: PoliceControlTypeEnum
-    timestamp: datetime | None = field(
+class PoliceControlResponse(PoliceControl):
+    speed_limit: int | None = None
+    last_seen: datetime | None = field(
         default=None,
         metadata=field_options(
             deserialize=datetime.fromtimestamp,
             serialize=lambda v: int(datetime.timestamp(v)),
         ),
     )
-    description: str
-    lat: float
-    lng: float
+    confirmed: int = 0
 
+    attr_map = [
+        "id",  # 59777                     59790
+        "county",  # Møre og Romsdal           Innlandet
+        "municipality",  # Kristiansund              Elverum
+        "type",  # Belte/mobil               Fartskontroll
+        "timestamp",  # 05.12 - 10:41             05.12 - 13:38
+        "description",  # Statens veivesen Rensvik  busslomme strandbygda
+        "lat",  # 63.1033706005419          60.8831426463528
+        "lng",  # 7.82150858039696          11.512297578156
+        None,  # ?                         ?
+        None,  # ?                         ?
+        None,  # kristiansund.png          elverum.png
+        None,  # more_og_romsdal.png       innlandet.png
+        "speed_limit",  # 50                        0
+        None,  # 1                         1
+        "last_seen",  # 10:41                     13:38
+        None,  # 0                         0          0
+        None,  # 2                         2          2
+        "confirmed",  # 2                         1          5
+    ]
+
+
+@dataclass(kw_only=True)
+class PoliceGPSControlsResponse(PoliceControl):
     attr_map = [
         "id",
         "county",
@@ -200,24 +230,16 @@ class PoliceGPSControlsResponse(PolitiKontrollerResponse):
         None,
     ]
 
-    @classmethod
-    def __pre_deserialize__(cls: type[T], d: T) -> T:
-        for k in ["timestamp"]:
-            d[k] = parse_datetime_like(d.get(k, ""))
-        return d
-
 
 @dataclass(kw_only=True)
-class PoliceControlsResponse(PolitiKontrollerResponse):
-    id: int
-    county: str
-    municipality: str
-    type: PoliceControlTypeEnum
-    timestamp: datetime | None
-    description: str
-    lat: float
-    lng: float
-    last_seen: datetime | None
+class PoliceControlsResponse(PoliceControl):
+    last_seen: datetime | None = field(
+        default=None,
+        metadata=field_options(
+            deserialize=datetime.fromtimestamp,
+            serialize=lambda v: int(datetime.timestamp(v)),
+        ),
+    )
 
     attr_map = [
         "id",
@@ -237,12 +259,6 @@ class PoliceControlsResponse(PolitiKontrollerResponse):
         None,
         "last_seen",
     ]
-
-    @classmethod
-    def __pre_deserialize__(cls: type[T], d: T) -> T:
-        for k in ["timestamp", "last_seen"]:
-            d[k] = parse_datetime_like(d.get(k, ""))
-        return d
 
 
 @dataclass
@@ -269,7 +285,7 @@ TR = TypeVar("TR", bound="PolitiKontrollerRequest")
 
 
 class EndpointRegistry:
-    _registry: dict[APIEndpoint, type[PolitiKontrollerRequest]] = {}
+    _registry: dict[APIEndpoint, type[TR]] = {}
 
     @classmethod
     def register(cls, endpoint: APIEndpoint) -> callable:
@@ -281,9 +297,9 @@ class EndpointRegistry:
         return decorator
 
     @classmethod
-    def get_request_class(cls, endpoint: APIEndpoint) -> type[PolitiKontrollerRequest]:
-        if endpoint not in cls._registry:
-            raise ValueError(f"No request class mapped for endpoint {endpoint}")
+    def get_request_class(cls, endpoint: APIEndpoint) -> type[TR]:
+        if endpoint not in cls._registry:  # pragma: no cover
+            return PolitiKontrollerRequest
         return cls._registry[endpoint]
 
 
@@ -359,9 +375,6 @@ class PolitiKontrollerRequest(PolitiKontrollerRequestBase):
             if f in d:
                 d[f] = re.sub(r"[|#\\\"]", "-", str(d[f]))
         return d
-
-    def requires_auth(self) -> bool:
-        return self.p.requires_auth()
 
     def get_query_params(self) -> dict[str, str]:
         """Get query parameters in specific order.

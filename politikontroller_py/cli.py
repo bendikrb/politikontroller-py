@@ -1,18 +1,31 @@
 """CLI tool."""
 
+from __future__ import annotations
+
 import logging
+from typing import TYPE_CHECKING
 
 import anyio
 import asyncclick as click
-from asyncclick.core import Context
 from tabulate import tabulate
 
 from politikontroller_py import Client
 from politikontroller_py.exceptions import AuthenticationError
 
+if TYPE_CHECKING:
+    from asyncclick.core import Context
+
 TABULATE_DEFAULTS = {
     "tablefmt": "rounded_grid",
 }
+
+
+def tabulate_model(data: list[dict], keys: list[str]) -> list[list[str]]:
+    result = [keys]
+    for item in data:
+        row = [item.get(key) for key in keys]
+        result.append(row)
+    return result
 
 
 @click.group()
@@ -36,7 +49,9 @@ TABULATE_DEFAULTS = {
 @click.option("--debug", is_flag=True, help="Set logging level to DEBUG")
 @click.pass_context
 async def cli(ctx: Context, username: str, password: str, debug: bool):
-    """Username and password can be defined using env vars.
+    """Connect to politikontroller.no and fetch data in a simple way.
+
+    Username and password can be defined using env vars.
 
     POLITIKONTROLLER_USERNAME
     POLITIKONTROLLER_PASSWORD
@@ -59,13 +74,20 @@ async def check(obj: Client):
     click.echo(res)
 
 
+@cli.command("get-control-types", short_help="get a list of control types.")
+@click.pass_obj
+async def get_control_types(obj):
+    types = await obj.get_control_types()
+    click.echo(tabulate([t.to_dict() for t in types], **TABULATE_DEFAULTS))
+
+
 @cli.command("get-controls", short_help="get a list of all active controls.")
 @click.option("--lat", required=True, help="Your position (latitude)")
 @click.option("--lng", required=True, help="Your position (longitude)")
 @click.pass_obj
 async def get_controls(obj, lat: float, lng: float):
     controls = await obj.get_controls(lat, lng)
-    click.echo(tabulate(controls, **TABULATE_DEFAULTS))
+    click.echo(tabulate([d.to_dict() for d in controls], **TABULATE_DEFAULTS))
 
 
 @cli.command("get-controls-radius", short_help="get all active controls inside a radius.")
@@ -78,7 +100,18 @@ async def get_controls_in_radius(obj: Client, lat: float, lng: float, radius: in
     _controls = await obj.get_controls_in_radius(lat, lng, radius, speed)
     controls = await obj.get_controls_from_lists(_controls)
 
-    click.echo(tabulate([d.to_dict() for d in controls], **TABULATE_DEFAULTS))
+    lists = tabulate_model(
+        [c.to_dict() for c in controls],
+        [
+            "id",
+            "timestamp",
+            "type",
+            "municipality",
+            "description",
+            "point",
+        ],
+    )
+    click.echo(tabulate(lists, headers="firstrow", **TABULATE_DEFAULTS))
 
 
 @cli.command("get-control", short_help="get details on a control.")
@@ -86,14 +119,39 @@ async def get_controls_in_radius(obj: Client, lat: float, lng: float, radius: in
 @click.pass_obj
 async def get_control(obj: Client, control_id: int):
     control = await obj.get_control(control_id)
-    click.echo(tabulate(control, **TABULATE_DEFAULTS))
+    click.echo(
+        tabulate(
+            tabulate_model(
+                [control.to_dict()],
+                [
+                    "id",
+                    "county",
+                    "municipality",
+                    "description",
+                    "type",
+                    "lat",
+                    "lng",
+                    "timestamp",
+                ],
+            ),
+            headers="firstrow",
+            **TABULATE_DEFAULTS,
+        )
+    )
 
 
 @cli.command("get-maps", short_help="get own maps.")
 @click.pass_obj
 async def get_maps(obj: Client):
     maps = await obj.get_maps()
-    click.echo(tabulate(maps, **TABULATE_DEFAULTS))
+    click.echo(tabulate([m.to_dict() for m in maps], **TABULATE_DEFAULTS))
+
+
+@cli.command("get-settings", short_help="get own settings.")
+@click.pass_obj
+async def get_settings(obj: Client):
+    settings = await obj.get_settings()
+    click.echo(tabulate(settings, **TABULATE_DEFAULTS))
 
 
 @cli.command("exchange-points", short_help="exchange points (?)")
@@ -153,10 +211,14 @@ def configure_logging(debug: bool = False):
     logging.basicConfig(level=level)
 
 
-async def main():
-    await cli.main()
+async def amain(args: list[str] | None = None):
+    await cli.main(args)
+
+
+def main():
+    # noinspection PyTypeChecker
+    anyio.run(amain)
 
 
 if __name__ == "__main__":
-    # noinspection PyTypeChecker
-    anyio.run(main)
+    main()

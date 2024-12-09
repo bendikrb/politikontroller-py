@@ -3,11 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlparse
 
+from aresponses import Response, ResponsesMockServer
 from aresponses.main import Route
 
 # noinspection PyProtectedMember
 from aresponses.utils import ANY, _text_matches_pattern
 
+from politikontroller_py.models.api import APIEndpoint
 from politikontroller_py.utils import aes_decrypt
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures"
@@ -61,3 +63,31 @@ class CustomRoute(Route):
             return False
 
         return True
+
+
+class PolitikontrollerMockServer(ResponsesMockServer):
+    def add_politikontroller(
+        self,
+        endpoint: APIEndpoint,
+        fixture: str,
+        params: dict | None = None,
+        **kwargs,
+    ):
+        if params is None:
+            params = {}
+        self.add(
+            response=Response(text=load_fixture(fixture)),
+            route=CustomRoute(
+                path_qs={"p": endpoint, **params},
+            ),
+            **kwargs,
+        )
+
+
+def setup_auth_mocks(aresponses: ResponsesMockServer):
+    aresponses.add(
+        response=Response(text=load_fixture("login")),
+        route=CustomRoute(
+            path_qs={"p": APIEndpoint.LOGIN},
+        ),
+    )

@@ -1,5 +1,6 @@
 from .account import Account, AuthenticationResponse, AuthStatus
 from .api import (
+    PoliceControl,
     PoliceControlResponse,
     PoliceControlsResponse,
     PoliceControlType,
@@ -12,6 +13,7 @@ __all__ = [
     "Account",
     "AuthenticationResponse",
     "AuthStatus",
+    "PoliceControl",
     "PoliceControlResponse",
     "PoliceControlsResponse",
     "PoliceControlType",

@@ -18,6 +18,7 @@ mashumaro = {extras = ["orjson"], version = "^3.13.1"}
 tabulate = "0.9.*"
 python = ">=3.10,<3.13"
 async-timeout = "^4.0.3"
+geojson = "^3.1.0"
 
 [tool.poetry.group.dev.dependencies]
 aresponses = "^3.0.0"
@@ -29,6 +30,7 @@ pytest = "^8.3.3"
 pytest-asyncio = "*"
 pytest-cov = "^5.0.0"
 ruff = "0.6.9"
+google-play-scraper = "^1.2.7"
 
 [tool.poetry.scripts]
 politikontroller = "politikontroller_py.cli:cli"
