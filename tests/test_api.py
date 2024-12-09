@@ -105,6 +105,7 @@ async def test_get_controls_in_radius(
             APIEndpoint.SPEED_CONTROL,
             f"hki_{i}",
             params={"kontroll_id": i},
+            repeat=2,
         )
 
     async with ClientSession() as session:
@@ -113,6 +114,8 @@ async def test_get_controls_in_radius(
         result = await client.get_controls_in_radius(lat=0, lng=0, radius=100, merge_duplicates=False)
         assert len(result) == 3
         assert all(isinstance(c, PoliceGPSControlsResponse) for c in result)
+        controls = await client.get_controls_from_lists(result)
+        assert len(controls) == 3
 
 
 async def test_get_controls_in_radius_clustered(

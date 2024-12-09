@@ -118,6 +118,12 @@ def parse_time_format(text: str) -> int | str:
         pass
 
     try:
+        if m := re.match(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}", text):
+            return int(datetime.fromisoformat(m[0]).astimezone().timestamp())
+    except ValueError:  # pragma: no cover
+        pass
+
+    try:
         return int(
             datetime.combine(
                 today,

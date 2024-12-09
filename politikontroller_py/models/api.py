@@ -106,7 +106,6 @@ class PoliceControl(PolitiKontrollerResponse):
         default=None,
         metadata=field_options(
             deserialize=datetime.fromtimestamp,
-            serialize=lambda v: int(datetime.timestamp(v)),
         ),
     )
     _merged_with: list[PoliceControl] = field(init=False, default_factory=list)
@@ -186,7 +185,6 @@ class PoliceControlResponse(PoliceControl):
         default=None,
         metadata=field_options(
             deserialize=datetime.fromtimestamp,
-            serialize=lambda v: int(datetime.timestamp(v)),
         ),
     )
     confirmed: int = 0
@@ -237,7 +235,6 @@ class PoliceControlsResponse(PoliceControl):
         default=None,
         metadata=field_options(
             deserialize=datetime.fromtimestamp,
-            serialize=lambda v: int(datetime.timestamp(v)),
         ),
     )
 

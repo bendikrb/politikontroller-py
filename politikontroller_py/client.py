@@ -308,7 +308,7 @@ class Client:
     async def get_controls_from_lists(
         self,
         controls: list[PoliceGPSControlsResponse | PoliceControlsResponse],
-    ) -> list[PoliceControlResponse]:  # pragma: no cover
+    ) -> list[PoliceControlResponse]:
         """Get details for a list of controls."""
         return [await self.get_control(i.id) for i in controls]
 
